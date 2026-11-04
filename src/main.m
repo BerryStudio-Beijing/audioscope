@@ -411,6 +411,11 @@ static NSWindow *make_window(NSString *title, CGFloat w, CGFloat h, int kind) {
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
     (void)note;
     [self buildMenu];
+    /* 尊重系统“减少动态效果”：开启后所有过渡立即到位 */
+    g_reduce_motion =
+        [[NSWorkspace sharedWorkspace] accessibilityDisplayShouldReduceMotion]
+            ? 1
+            : 0;
     NSRect screen = NSScreen.mainScreen.visibleFrame;
     CGFloat mw = MIN(1500, screen.size.width * 0.95);
     CGFloat mh = MIN(950, screen.size.height * 0.95);

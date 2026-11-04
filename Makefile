@@ -3,8 +3,8 @@ APP      := AudioScope
 VERSION  := 1.1
 BUILD    := build
 SRC      := src
-CFLAGS   := -std=c11 -O2 -Wall -Wextra -Isrc
-OBJCFLAGS:= -fobjc-arc -O2 -Wall
+CFLAGS   := -std=c11 -O2 -Wall -Wextra -Isrc -mmacosx-version-min=12.0
+OBJCFLAGS:= -fobjc-arc -O2 -Wall -mmacosx-version-min=12.0
 FRAMEWORKS := -framework Cocoa -framework CoreAudio -framework AudioToolbox \
               -framework AudioUnit -framework CoreFoundation \
               -framework CoreGraphics -framework CoreText \
@@ -34,7 +34,7 @@ $(BUILD)/tests/%.o: tests/%.c
 	$(CC) -std=c11 -O1 -Wall -Wextra -Isrc -c $< -o $@
 
 $(BUILD)/$(APP): $(OBJS)
-	$(CC) $(OBJS) -o $@ $(FRAMEWORKS) -lm
+	$(CC) $(OBJS) -o $@ $(FRAMEWORKS) -lm -mmacosx-version-min=12.0
 
 app: $(BUILD)/$(APP)
 	@rm -rf $(BUILD)/$(APP).app
@@ -64,6 +64,16 @@ test: all
 	./$(BUILD)/$(APP) --selftest
 	./$(BUILD)/$(APP) --unittest
 
+# 发布产物：dist/ 里放带架构名的 DMG + ZIP + SHA256
+release: app dmg
+	@rm -rf dist && mkdir -p dist
+	@cp $(BUILD)/$(APP)-$(VERSION).dmg \
+		dist/$(APP)-$(VERSION)-macos-arm64.dmg
+	@ditto -c -k --sequesterRsrc --keepParent $(BUILD)/$(APP).app \
+		dist/$(APP)-$(VERSION)-macos-arm64.zip
+	@cd dist && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+	@echo "--- dist ---" && ls -lh dist
+
 shot: all
 	@mkdir -p $(BUILD)/shots
 	./$(BUILD)/$(APP) --shot $(BUILD)/shots
@@ -72,6 +82,18 @@ asan: CFLAGS += -fsanitize=address -g -O1
 asan: OBJCFLAGS += -fsanitize=address -g -O1
 asan: clean all
 	ASAN_OPTIONS=detect_leaks=0 ./$(BUILD)/$(APP) --selftest
+
+# Windows 命令行核心（无 GUI、无音频 IO）：纯 C，可用 mingw-w64 交叉编译
+MINGW  ?= x86_64-w64-mingw32-gcc
+WINOUT := dist/win
+
+win-core:
+	@mkdir -p $(WINOUT)
+	$(MINGW) -std=c11 -O2 -Wall -Wextra -Isrc -D__USE_MINGW_ANSI_STDIO=1 \
+		-o $(WINOUT)/$(APP)-$(VERSION)-win-x64-core.exe \
+		src/dsp.c src/wavegen.c src/calib.c src/analyze.c src/report.c \
+		tests/selftest.c tests/unit.c win/core_main.c -lm
+	@file $(WINOUT)/$(APP)-$(VERSION)-win-x64-core.exe
 
 clean:
 	rm -rf $(BUILD)

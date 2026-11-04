@@ -19,6 +19,7 @@
 
 static int g_pass, g_fail;
 static const char *g_group = "";
+static void mkdir_p(const char *path);
 
 static void group(const char *s) {
     g_group = s;
@@ -255,7 +256,7 @@ static void test_calib_and_report(void) {
         c.phase_deg[i] = -i * 5.0;
     }
     c.delay_ms = 8.4;
-    mkdir("build/sim", 0755);
+    mkdir_p("build/sim");
     check(calib_save(&c, "build/sim/ut_cal.json") == 0, "校准写入", "build/sim");
     CalibData r;
     int ok = calib_load(&r, "build/sim/ut_cal.json") == 0;
@@ -332,17 +333,27 @@ static double dut_phase_deg(const VirtualDut *d, double f) {
 }
 
 
+/* 跨平台建目录（Windows 用 _mkdir，POSIX 用 mkdir） */
+#ifdef _WIN32
+#include <direct.h>
+#define ut_mkdir(p) _mkdir(p)
+#else
+#include <sys/stat.h>
+#define ut_mkdir(p) mkdir(p, 0755)
+#endif
+
 static void mkdir_p(const char *path) {
     char tmp[1024];
     snprintf(tmp, sizeof(tmp), "%s", path);
     for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
+        if (*p == '/' || *p == '\\') {
+            char sep = *p;
             *p = 0;
-            mkdir(tmp, 0755);
-            *p = '/';
+            ut_mkdir(tmp);
+            *p = sep;
         }
     }
-    mkdir(tmp, 0755);
+    ut_mkdir(tmp);
 }
 
 int run_simulate(const char *dir) {

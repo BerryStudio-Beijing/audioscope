@@ -4,3 +4,4 @@ build/
 *.dmg
 *.png
 build/repro/
+dist/
