@@ -25,10 +25,17 @@
 make            # 生成 build/AudioScope
 make app        # 打包成 build/AudioScope.app
 make dmg        # 打包成 build/AudioScope-1.1.dmg
+make release    # dist/：带架构名的 DMG + ZIP + SHA256SUMS（发布用）
 make run        # 直接启动
 make test       # DSP 自检（30 项）+ 单元测试（23 项）
 make shot       # 离屏渲染 6 张界面图到 build/shots
+make win-core   # （可选）用 mingw-w64 交叉编译纯 C 核心为 Windows PE
 ```
+
+运行要求：Apple Silicon（arm64），macOS 12.0 或更新（二进制 `minos=12.0`）。
+Windows 版暂不提供：界面与音频用的是 Cocoa / CoreAudio / CoreText 原生实现，
+Windows 需要独立的 Win32 + Direct2D + WASAPI 平台层；仓库里的 `win/core_main.c`
+只是纯 C 测量内核的交叉编译脚手架，不是可用的图形版。
 
 只依赖 Xcode Command Line Tools（clang + macOS SDK），**没有任何第三方库**。
 链接的系统框架：Cocoa、CoreAudio、AudioToolbox、AudioUnit、CoreGraphics、CoreText、ImageIO。
