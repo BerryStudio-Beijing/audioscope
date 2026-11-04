@@ -591,8 +591,8 @@ static void bode_chart(App *a, UI *u, ASRect r) {
     bot.h = r.h - top.h - GAP2;
 
     Plot pm, pp;
-    plot_begin(u, &pm, top, "幅频", NULL, 1);
-    plot_begin(u, &pp, bot, "相频", NULL, 0);
+    plot_begin(u, &pm, top, "幅频 dB", NULL, 1);
+    plot_begin(u, &pp, bot, "相频 °", NULL, 1);
     for (int i = 0; i < 2; i++) {
         Plot *p = i ? &pp : &pm;
         p->x0 = log10(a->bode_f1);
@@ -711,6 +711,7 @@ static void bode_left(App *a, UI *u, ASRect r) {
 static void bode_right(App *a, UI *u, ASRect r) {
     panel_card(u, r);
     Col c;
+    char tmp[32];
     col_begin(&c, u, r.x + GAP4, r.y + GAP4, r.w - GAP4 * 2);
     char v[48];
     BodeTrace *b = &a->bode;
@@ -731,8 +732,8 @@ static void bode_right(App *a, UI *u, ASRect r) {
     c.y += 54;
 
     c.y = ui_group(u, c.x, c.y, c.w, "扫频状态") + 4;
-    kv(u, col_row(&c, 22), "点数", b->n ? "" : "—", g_pal.text);
-    char tmp[32];
+    snprintf(tmp, sizeof(tmp), "%d", b->n);
+    kv(u, col_row(&c, 22), "点数", b->n ? tmp : "—", g_pal.text);
     snprintf(tmp, sizeof(tmp), "%d / %d", a->bode_idx, a->bode_points);
     kv(u, col_row(&c, 22), "进度", tmp, g_pal.text_dim);
     snprintf(tmp, sizeof(tmp), "%d", a->bode_active ? 1 : 0);
