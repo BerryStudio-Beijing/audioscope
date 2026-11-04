@@ -1,0 +1,198 @@
+# AudioScope 1.1 — 声卡示波器 / 频谱仪 / 闭环测试仪（纯 C）
+
+`test_pcb`（Python + PyQt6 版）的 **C 重写版**，1.1 在 1.0 基础上做了两件事：
+
+1. **界面整体重绘**：按“精密仪器”视觉规范重做（暖灰石墨面板、单一鼠尾草绿重点色、
+   三种排印角色、4px 网格、图表 32px 安全区、仅向下填充、去掉一切发光/霓虹/JUCE 味）。
+2. **新增本地闭环测试**：自写波形算法 + 自动校准 + 采集分析 + 报告导出，
+   输出可比较、可复现的 JSON/CSV/WAV，并给出电路调整建议与下一轮测试参数。
+
+| | Python 版 (`../test_pcb`) | 本项目（C） |
+|---|---|---|
+| 运行时依赖 | Python 3.9 + venv（273 MB） | 无（只用系统框架） |
+| 可执行文件 | venv + 20+ 个包 | **1 个 170 KB 二进制**，`.app` 约 180 KB |
+| 启动 | 1–2 s（导入 numpy/PyQt） | **< 0.1 s** |
+| 界面 | PyQt6 + pyqtgraph | 自绘 CoreGraphics + CoreText（自带主题令牌） |
+| 音频 | sounddevice / PortAudio | CoreAudio HAL（IOProc 直连） |
+| FFT | numpy（Accelerate） | 自己的 radix-2 FFT |
+| 文件解码 | soundfile + afconvert | CoreAudio ExtAudioFile（WAV/MP3/FLAC/M4A/AAC/ALAC…） |
+
+---
+
+## 1. 编译与运行
+
+```bash
+make            # 生成 build/AudioScope
+make app        # 打包成 build/AudioScope.app
+make dmg        # 打包成 build/AudioScope-1.1.dmg
+make run        # 直接启动
+make test       # DSP 自检（30 项）+ 单元测试（23 项）
+make shot       # 离屏渲染 6 张界面图到 build/shots
+```
+
+只依赖 Xcode Command Line Tools（clang + macOS SDK），**没有任何第三方库**。
+链接的系统框架：Cocoa、CoreAudio、AudioToolbox、AudioUnit、CoreGraphics、CoreText、ImageIO。
+
+首次运行会请求**麦克风权限**，必须允许，否则没有输入信号。
+
+---
+
+## 2. 界面（1.1 设计语言）
+
+规范落地的几条硬规则（都能在代码里找到对应实现）：
+
+| 规则 | 实现位置 |
+|---|---|
+| 语义颜色令牌，只有一处定义；暗色为主，明色不是反相 | `src/theme.h` / `src/theme.c` |
+| 单一重点色（鼠尾草绿）只用于当前/选中/正常；琥珀=注意、砖红=超限 | `Palette` 里的 `accent / warn / bad` |
+| 三种排印角色：Label 14（uppercase + tracking）/ Value 16（等宽数字）/ Critical 26 | `ui.c` 的 `FONT_LABEL / FONT_VALUE / FONT_CRIT`（`tnum` 特性，刷新不抖动） |
+| 每屏最多两个“关键大数字”，其余行式读数 | `big_number()` / `kv()` |
+| 网格 4px；组内 8、区块 16、大分组 24、图表安全区 32 | `theme.h` 的 `GAP1..GAP8` |
+| 材质只有两种：raised（左上提亮/右下压暗 + 接触阴影）、recessed（顶部内阴影） | `mat_raised()` / `mat_recessed()` |
+| 图表：主曲线最亮且最粗，填充只向下，网格低对比 | `polyline()` / `fill_down()` |
+| 状态：hover / pressed / selected / focus / disabled / warning 都要能区分 | `ui_button/ui_toggle/ui_cycle/ui_field` |
+| 无持续装饰动画；过渡 140ms，系统“减少动态”时立即 | `g_reduce_motion`（读系统设置） |
+| 数字用真减号 −，缺失用 —，范围用 – | `pretty_minus()` |
+| 瀑布不用彩虹色 | `as_cmap()`：鼠尾草/石墨/冷灰/靛青，单调亮度 |
+
+页眉右侧是低频操作（帮助、主题切换）；页脚是技术状态行（设备、采样率、缓冲、溢出、消息）。
+
+---
+
+## 3. 功能
+
+**主窗口四个页签**
+
+- **波形 / 时域**：触发源/边沿/电平、时基、垂直、AC/DC、A+B/A−B；右侧 Vpp、频率两个大数字 + 行式读数
+- **频谱 / FFT**：1k–128k 点、6 种窗、平均、峰值保持、对数频率范围；下方瀑布图（时间×频率）
+- **频率响应**：起止频率/点数扫频，幅频 + 相频上下两图，可导出 CSV
+- **闭环测试**（1.1 新增，见第 4 节）
+
+**信号源窗口**：正弦/方波/三角/锯齿/白噪/粉噪/双音/扫频，电平 −80…0 dBFS，
+播放任意系统支持的音频文件（CoreAudio 解码 + 自动重采样）。
+
+**AUTO**（F6）：自动选通道、测频率、定时基与垂直档位并居中。
+
+---
+
+## 4. 闭环测试（1.1 新增）
+
+链路：**声卡输出 → 被测电路 → 声卡输入**，全程本地，不联网、不上传。
+
+### 4.1 模块
+
+```
+src/wavegen.c/h   测试信号发生器：相位累加器 + PolyBLEP 带限 + 固定种子噪声
+src/calib.c/h     校准数据：逐频点幅相 + 延迟，JSON 读写，对数轴插值
+src/analyze.c/h   采集分析：互相关对齐（亚采样）、单频点幅相、同步平均、噪声底、上升沿
+src/report.c/h    报告：JSON / CSV / 24-bit WAV + 规则式建议
+src/loopback.c/h  流程状态机：延迟 → 频响 → THD+N → 噪声 → 上升沿 → 报告
+tests/unit.c      23 项单元测试 + 虚拟 DUT 端到端验证
+scripts/run_loopback.sh  可重复测试脚本（不需要硬件）
+```
+
+### 4.2 波形精度（可量化）
+
+| 波形 | 频率误差 | 幅度误差 | 非谐波杂散 |
+|---|---|---|---|
+| 正弦 | 0 ppm（20 Hz–15 kHz） | 0.000 dB | −122 dBc |
+| 三角 | — | 0.000 dB | −43 dBc |
+| 方波（PolyBLEP） | 0 dB 峰值 | 0.000 dB | −25 dBc（奈奎斯特附近谐波折叠） |
+| 白噪/粉噪 | 固定种子，同参数逐位一致 | — | — |
+
+这些数字是 `--unittest` 每次实测算出来的，不是写在文档里的话。
+
+### 4.3 流程
+
+1. **直连校准**：输出直接回接输入，扫描 20 Hz–20 kHz，记录声卡本身的幅相误差与往返延迟，
+   存 `~/Documents/AudioScope/calibration.json`；
+2. **接入被测电路**，勾选“扣除校准”，点“开始测试”；
+3. 每点先稳定（≥40 个周期）再采 8192 点，用互相关对齐后做单频点 DFT，得到增益与相位；
+4. 1 kHz 测 THD/THD+N/SNR/SINAD，静音测噪声底，1 kHz 方波测 10–90% 上升沿，扫频测延迟；
+5. 输出 `report-YYYYmmdd-HHMMSS.json`、`report-*.csv`、`capture-*.wav` 到 `~/Documents/AudioScope`。
+
+### 4.4 报告与建议
+
+报告里有：频响 24 点（增益/相位）、峰谷差、最大偏差及频点、THD、THD+N、SNR、SINAD、
+噪声底、往返延迟、上升沿、削波点数、判定。设置哈希写在 JSON 里，**同一设置重复运行逐字节一致**
+（`scripts/run_loopback.sh` 会真的比对两次输出）。
+
+建议是规则推理，不是“AI 生成”：
+
+- 高频滚降 → 指出截止频点并给出 `f = 1/(2πRC)` 的调整方向；
+- 低频衰减 → 耦合电容/变压器的量化建议；
+- THD+N 偏高 → 先降 6 dB 电平复测以区分失真与噪声；
+- 削波 → 自动给出下一轮电平；
+- 每份报告最后一行是**下一轮参数**（电平、点数、频段加密方式）。
+
+---
+
+## 5. 快捷键
+
+| 键 | 作用 |
+|---|---|
+| ⌘R | 开始 / 停止采集 |
+| ⌘⇧A 或 F6 | AUTO 自适应 |
+| ⌘G | 信号源窗口 |
+| ⌘O | 打开音频文件 |
+| ⌘S / ⌘⇧S / ⌘B | 保存 WAV / CSV / 频响 CSV |
+| ⌘P | 截图 |
+| ⌘0 | 复位缩放 |
+| T | 切换明/暗主题 |
+| 空格 | 冻结 |
+| ← / → | 时基缩放 |
+| ⌘Q | 退出 |
+
+---
+
+## 6. 架构
+
+```
+src/
+├── theme.h/.c        设计令牌（颜色/间距/圆角/排印），暗色与明色两套
+├── dsp.h/.c          发生器、触发、时域测量、FFT、THD/SNR/SINAD/ENOB/SFDR、对数分箱、格式化
+├── audio.h/.c        CoreAudio 双设备 IOProc、环形缓冲、重采样、ExtAudioFile 解码、帧计数
+├── ui.h/.c           立即模式控件 + 材质 + 字体（含 tnum）+ 全部状态
+├── view.c            四个页签的图表与面板、页眉/导航/页脚、信号源窗口
+├── app.h/.c          状态、设置持久化、30 Hz 主循环、AUTO、扫频、闭环测试调度、导出
+├── wavegen/calib/analyze/report/loopback   1.1 新增测量链
+├── main.m            AppKit 外壳、菜单、事件、文件对话框、CLI 入口
+└── tests/            selftest.c（30 项）、unit.c（23 项 + 虚拟 DUT）
+```
+
+音频回调在 CoreAudio 线程；UI 在 30 Hz 定时器里读环形缓冲；生成器配置用互斥锁整体替换
+（1.1 修掉了 1.0 里无锁写 `gen_cfg` 的潜在撕裂读）。
+
+---
+
+## 7. 自检与验证
+
+```bash
+make test                          # --selftest + --unittest
+./build/AudioScope --simulate DIR  # 用已知传递函数的虚拟 DUT 跑完整分析链
+./scripts/run_loopback.sh          # 上面全部 + 两遍结果逐字节比对
+./build/AudioScope --devices       # 列出 CoreAudio 设备
+./build/AudioScope --audiotest     # 真开设备跑 2 s，打印回调/电平/溢出
+./build/AudioScope --shot build/shots
+```
+
+本机（MacBook Pro，48 kHz，内置麦克风 + 耳机）实测：
+`--selftest` 30/30、`--unittest` 23/23、`--audiotest` `in_cb=198 out_cb=204 xrun=0`、
+`--simulate` 频响误差 0.000 dB（24 点全频段）。
+
+---
+
+## 8. 常见问题
+
+**没有波形 / 峰值 −180 dBFS**：麦克风权限没给，或输入设备选错、输入增益为 0。
+
+**闭环测试没有读数**：先确认“开始采集”是运行状态；再确认输出确实接到了输入（可先做直连校准，
+校准时应看到 0 dB 附近的一条平线）。
+
+**相位看起来在跳**：相位是相对值，超过 ±180° 会折叠；跨频点比较时看趋势，不要看绝对值。
+
+**打包后提示「无法验证开发者」**：`make app` 已做 ad-hoc 签名；右键 → 打开，或
+`xattr -dr com.apple.quarantine build/AudioScope.app`。
+
+**读数不准**：在左栏“满量程”里填输入口 0 dBFS 对应的峰值电压（万用表标定）。
+

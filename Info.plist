@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>AudioScope</string>
+    <key>CFBundleDisplayName</key>
+    <string>AudioScope</string>
+    <key>CFBundleExecutable</key>
+    <string>AudioScope</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.local.audioscope</string>
+    <key>CFBundleVersion</key>
+    <string>1.1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.1</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AudioScope 需要访问音频输入设备来采集并显示波形。</string>
+</dict>
+</plist>

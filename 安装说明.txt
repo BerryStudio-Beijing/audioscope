@@ -1,0 +1,43 @@
+AudioScope — 声卡示波器 / 频谱仪 / 闭环测试仪（C 版 v1.1，arm64）
+
+【安装】
+1. 把左边的 AudioScope 拖到右边的 Applications 文件夹。
+2. 首次打开若提示「无法验证开发者」：右键点 AudioScope → 打开 → 再点「打开」；
+   或在终端执行：
+     xattr -dr com.apple.quarantine /Applications/AudioScope.app
+3. 第一次点「开始采集」时，系统会请求「麦克风」权限，必须允许，否则没有输入信号。
+
+【接线】
+  声卡线路输出 → 被测电路 → 声卡线路输入。
+  测频率响应时建议：
+     UR22C OUT1 → 2i2 IN1（直通做参考）
+     UR22C OUT2 → 被测板 → 2i2 IN2（被测）
+  输入输出可以是两台不同的声卡（左栏「设备」里分别选）。
+
+【闭环测试（1.1 新增）】
+  1) 先把输出用线直接接回输入，到「闭环测试」页点「直连校准」，
+     测出声卡自身的幅相误差与延迟，存 ~/Documents/AudioScope/calibration.json；
+  2) 再把被测电路接进去，勾选「扣除校准」，点「开始测试」；
+  3) 结束后报告自动写到 ~/Documents/AudioScope/：
+     report-*.json（全部指标 + 调整建议）、report-*.csv（频响曲线）、capture-*.wav。
+  全程本地，不联网。同样的设置重复运行，报告逐字节一致。
+
+【常用操作】
+  ⌘R  开始 / 停止采集
+  F6 或 ⌘⇧A   AUTO 自适应（自动找时基 / 垂直档位 / 触发）
+  ⌘G  打开信号源窗口（发生器 + 播放音乐）
+  ⌘L  跳到闭环测试页      ⌘⇧L 直接开始闭环测试
+  ⌘O  打开音频文件      ⌘S 保存 WAV      ⌘P 截图
+  T   切换明/暗主题      空格 冻结
+  滚轮 = 缩放时基       Ctrl+滚轮 = 缩放垂直       ⌘0 复位缩放
+
+【读数校准】
+  左栏「满量程」填输入口 0 dBFS 对应的峰值电压（用万用表标定），
+  之后所有电压读数才和实际一致。
+
+【设置保存】
+  ~/Library/Application Support/AudioScope/config.txt
+  校准与报告：~/Documents/AudioScope/
+
+详细说明见项目目录：
+  /Users/mmr/Documents/vscode/test_pcb_c/README.md
