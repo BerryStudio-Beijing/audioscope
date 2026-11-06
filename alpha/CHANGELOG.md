@@ -1,5 +1,20 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.5.0-alpha.1 — 2026-11-07
+
+### Added
+
+- THD / THD+N / SNR / SINAD / SFDR / ENOB single-tone analysis.
+- IMD SMPTE (60 Hz + 7 kHz) and DIN (250 Hz + 8 kHz).
+- THD vs level sweep with CSV export.
+- `thd`, `imd`, `sweep` commands.
+- Selftest expanded to 44 checks (THD 0.1%, IMD 0.1%).
+
+### Changed
+
+- Version 0.5.0-alpha.1.
+- Repair measurement suite focus; native GUI/WASAPI remain future work.
+
 ## 0.4.0-alpha.1 — 2026-11-07
 
 ### Added

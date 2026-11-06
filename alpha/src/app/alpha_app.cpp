@@ -7,6 +7,7 @@
 #include "core/repair.h"
 #include "core/report.h"
 #include "core/spectrogram.h"
+#include "core/tone.h"
 #include "core/stats.h"
 #include "core/window.h"
 #include "platform/audio_backend.h"
@@ -56,7 +57,7 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "%s %s — sound-card audio repair workstation (0.4-alpha)\n"
+        "%s %s — sound-card audio repair workstation (0.5-alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
@@ -72,6 +73,9 @@ void print_help() {
         "  audioscope-alpha impedance --r R --vsrc V --vdut V | --simulate Z\n"
         "  audioscope-alpha azimuth [seconds] [--synthetic --phase DEG]\n"
         "  audioscope-alpha compare <before.json> <after.json>\n"
+        "  audioscope-alpha thd [seconds] [--synthetic --freq HZ --level DBFS --thd PCT]\n"
+        "  audioscope-alpha imd [seconds] [--synthetic --standard smpte|din]\n"
+        "  audioscope-alpha sweep [--start DBFS --end DBFS --step DB --csv FILE]\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -457,6 +461,38 @@ int run_self_test() {
     double z = 0.0;
     check(as_impedance(1000.0, 0.5, 1.0, &z) == 0 && std::fabs(z - 1000.0) < 0.01,
           "impedance 1000 ohm");
+
+    std::vector<float> tone_sig(8192);
+    for (int i = 0; i < 8192; ++i) {
+        double t = (double)i / kSampleRate;
+        double v = 0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t)
+                 + 0.5 * 0.0008 * std::sin(2.0 * 3.14159265358979323846 * 2000.0 * t)
+                 + 0.5 * 0.0006 * std::sin(2.0 * 3.14159265358979323846 * 3000.0 * t);
+        tone_sig[(size_t)i] = (float)v;
+    }
+    AsToneResult tr;
+    check(as_tone_analyze(tone_sig.data(), 8192, kSampleRate, &tr) == 0 &&
+              tr.thd_pct > 0.05 && tr.thd_pct < 0.2 && tr.snr_db > 40.0,
+          "THD 0.1% / SNR");
+
+    const int imdn = 32768;
+    std::vector<float> imd_sig(imdn);
+    for (int i = 0; i < imdn; ++i) {
+        double t = (double)i / kSampleRate;
+        double f1 = 60.0, f2 = 7000.0, side = 0.1 * 0.0005;
+        double v = 0.4 * std::sin(2.0 * 3.14159265358979323846 * f1 * t)
+                 + 0.1 * std::sin(2.0 * 3.14159265358979323846 * f2 * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - 2.0 * f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + 2.0 * f1) * t);
+        imd_sig[(size_t)i] = (float)v;
+    }
+    double imd_pct = 0.0, imd_f1 = 0.0, imd_f2 = 0.0;
+    check(as_imd_analyze(imd_sig.data(), imdn, kSampleRate, 0,
+                         &imd_pct, &imd_f1, &imd_f2) == 0 &&
+              imd_pct > 0.05 && imd_pct < 0.25,
+          "IMD SMPTE 0.1%");
 
     const int dn = 5 * kSampleRate;
     std::vector<float> da(dn), db(dn);
@@ -1013,7 +1049,7 @@ int cmd_session(const std::string &dir) {
         std::fprintf(stderr, "session create failed\n");
         return 1;
     }
-    as_session_event(s, "app_start", "{\"version\":\"0.4.0-alpha.1\"}");
+    as_session_event(s, "app_start", "{\"version\":\"0.5.0-alpha.1\"}");
     as_session_event(s, "input_mode", "{\"mode\":\"inst\"}");
     as_session_event(s, "note", "{\"text\":\"v0.2 session demo\"}");
     std::printf("session: %s (%d events)\n", as_session_path(s), as_session_count(s));
@@ -1583,6 +1619,150 @@ int cmd_compare(const std::vector<std::string> &args) {
 }
 
 
+void make_tone_signal(std::vector<float> *x, int n, double fs, double freq,
+                      double level_dbfs, double thd_pct) {
+    x->assign((size_t)n, 0.0f);
+    double amp = std::pow(10.0, level_dbfs / 20.0);
+    double h2 = amp * thd_pct / 100.0 * 0.8;
+    double h3 = amp * thd_pct / 100.0 * 0.6;
+    for (int i = 0; i < n; ++i) {
+        double t = (double)i / fs;
+        double v = amp * std::sin(2.0 * 3.14159265358979323846 * freq * t)
+                 + h2 * std::sin(2.0 * 3.14159265358979323846 * 2.0 * freq * t)
+                 + h3 * std::sin(2.0 * 3.14159265358979323846 * 3.0 * freq * t);
+        (*x)[(size_t)i] = (float)v;
+    }
+}
+
+int cmd_thd(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 2.0);
+    if (seconds < 0.5) seconds = 0.5;
+    if (seconds > 30.0) seconds = 30.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    double freq = opt_num(args, "--freq", 1000.0);
+    double level = opt_num(args, "--level", -6.0);
+    double thd_in = opt_num(args, "--thd", 0.1);
+    double fs = kSampleRate;
+    std::vector<float> x;
+    if (synthetic) {
+        make_tone_signal(&x, (int)(seconds * fs), fs, freq, level, thd_in);
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 1) channels = 1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &x);
+        as_audio_close(audio);
+    }
+    AsToneResult r;
+    if (as_tone_analyze(x.data(), (int)x.size(), fs, &r) != 0) {
+        std::fprintf(stderr, "THD analysis failed (no stable tone)\n");
+        return 1;
+    }
+    std::printf("%s %.2f s · %.1f Hz\n", synthetic ? "synthetic" : "live", seconds, r.freq_hz);
+    std::printf("  THD %.4f %% (%.2f dBc)   THD+N %.4f %% (%.2f dB)\n",
+                r.thd_pct, r.thd_db, r.thdn_pct, r.thdn_db);
+    std::printf("  SNR %.2f dB   SINAD %.2f dB   SFDR %.2f dB   ENOB %.2f bit\n",
+                r.snr_db, r.sinad_db, r.sfdr_db, r.enob);
+    if (synthetic) std::printf("  injected THD≈%.3f %%\n", thd_in);
+    return 0;
+}
+
+int cmd_imd(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 2.0);
+    if (seconds < 0.5) seconds = 0.5;
+    if (seconds > 30.0) seconds = 30.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    std::string std_name = opt_value(args, "--standard", "smpte");
+    int din = (std_name == "din") ? 1 : 0;
+    double f1 = din ? 250.0 : 60.0;
+    double f2 = din ? 8000.0 : 7000.0;
+    double fs = kSampleRate;
+    std::vector<float> x;
+    if (synthetic) {
+        int n = (int)(seconds * fs);
+        x.assign((size_t)n, 0.0f);
+        double a1 = 0.4, a2 = 0.1;
+        double side = a2 * 0.0005; /* four sidebands ≈ 0.1% total */
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            double v = a1 * std::sin(2.0 * 3.14159265358979323846 * f1 * t)
+                     + a2 * std::sin(2.0 * 3.14159265358979323846 * f2 * t)
+                     + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - f1) * t)
+                     + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + f1) * t)
+                     + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - 2.0 * f1) * t)
+                     + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + 2.0 * f1) * t);
+            x[(size_t)i] = (float)v;
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 1) channels = 1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &x);
+        as_audio_close(audio);
+    }
+    double imd = 0.0, ff1 = 0.0, ff2 = 0.0;
+    if (as_imd_analyze(x.data(), (int)x.size(), fs, din, &imd, &ff1, &ff2) != 0) {
+        std::fprintf(stderr, "IMD analysis failed (need the two test tones)\n");
+        return 1;
+    }
+    std::printf("%s %.2f s · %s · %.1f Hz + %.1f Hz\n",
+                synthetic ? "synthetic" : "live", seconds,
+                din ? "DIN" : "SMPTE", ff1, ff2);
+    std::printf("  IMD %.4f %% (%.2f dBc)\n", imd, 20.0 * std::log10(std::max(imd, 1e-9) / 100.0));
+    if (synthetic) std::printf("  injected IMD≈0.100 %%\n");
+    return 0;
+}
+
+int cmd_sweep(const std::vector<std::string> &args) {
+    double start = opt_num(args, "--start", -40.0);
+    double end = opt_num(args, "--end", 0.0);
+    double step = opt_num(args, "--step", 6.0);
+    double freq = opt_num(args, "--freq", 1000.0);
+    double thd_in = opt_num(args, "--thd", 0.1);
+    if (step <= 0.0 || end < start) {
+        std::fprintf(stderr, "invalid sweep range\n");
+        return 1;
+    }
+    std::string csv = opt_value(args, "--csv", "");
+    FILE *f = csv.empty() ? nullptr : std::fopen(csv.c_str(), "wb");
+    if (!csv.empty() && !f) {
+        std::fprintf(stderr, "cannot write %s\n", csv.c_str());
+        return 1;
+    }
+    if (f) std::fprintf(f, "level_dbfs,thd_pct,thdn_pct,snr_db,sinad_db\n");
+    std::printf("%10s %10s %10s %10s\n", "dBFS", "THD%", "THD+N%", "SNR dB");
+    for (double level = start; level <= end + 1e-9; level += step) {
+        std::vector<float> x;
+        make_tone_signal(&x, kFftSize, kSampleRate, freq, level, thd_in);
+        AsToneResult r;
+        if (as_tone_analyze(x.data(), (int)x.size(), kSampleRate, &r) != 0) continue;
+        std::printf("%10.1f %10.4f %10.4f %10.2f\n", level, r.thd_pct, r.thdn_pct, r.snr_db);
+        if (f) std::fprintf(f, "%.1f,%.6f,%.6f,%.6f,%.6f\n",
+                            level, r.thd_pct, r.thdn_pct, r.snr_db, r.sinad_db);
+    }
+    if (f) std::fclose(f);
+    return 0;
+}
+
+
 } // namespace
 
 int run_alpha_cli(int argc, char **argv) {
@@ -1619,6 +1799,9 @@ int run_alpha_cli(int argc, char **argv) {
     if (cmd == "impedance") return cmd_impedance(args);
     if (cmd == "azimuth") return cmd_azimuth(args);
     if (cmd == "compare") return cmd_compare(args);
+    if (cmd == "thd") return cmd_thd(args);
+    if (cmd == "imd") return cmd_imd(args);
+    if (cmd == "sweep") return cmd_sweep(args);
     if (cmd == "tone") return cmd_tone(args);
     if (cmd == "session") return cmd_session(args.size() > 2 ? args[2] : "build/session");
     if (cmd == "calibrate") return cmd_calibrate(args);

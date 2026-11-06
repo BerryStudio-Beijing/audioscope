@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.4-alpha — measurement report (JSON + HTML). */
+/* AudioScope by BerryStudio 0.5-alpha — measurement report (JSON + HTML). */
 #ifndef AS_CORE_REPORT_H
 #define AS_CORE_REPORT_H
 

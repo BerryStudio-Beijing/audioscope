@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.4-alpha — append-only JSONL session log. */
+/* AudioScope by BerryStudio 0.5-alpha — append-only JSONL session log. */
 #include "core/api.h"
 
 #include <stdio.h>

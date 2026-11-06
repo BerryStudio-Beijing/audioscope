@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.4-alpha — null backend for platforms without an audio layer. */
+/* AudioScope by BerryStudio 0.5-alpha — null backend for platforms without an audio layer. */
 #include "platform/audio_backend.h"
 #include "core/ring.h"
 

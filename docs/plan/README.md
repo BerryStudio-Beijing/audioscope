@@ -17,6 +17,7 @@
 | [`V0.2.md`](V0.2.md) | 0.2-alpha 实现与测试记录（对应 v1.2 核心） | 产品/工程/测试 |
 | [`V0.3.md`](V0.3.md) | 0.3-alpha 实现与测试记录（对应 v1.3 核心） | 产品/工程/测试 |
 | [`V0.4.md`](V0.4.md) | 0.4-alpha 实现与测试记录（对应 v1.4 核心） | 产品/工程/测试 |
+| [`V0.5.md`](V0.5.md) | 0.5-alpha 实现与测试记录 | 产品/工程/测试 |
 
 建议在仓库中的放置方式：
 
@@ -64,6 +65,7 @@ C11 实时核心 + C++17 应用/平台层；macOS 用 CoreAudio/CoreGraphics，W
 | **0.2-alpha** | Safe & Calibrated Core | 输入模式、SafetyGuard、逐档校准、信号检查、测量、JSON/HTML 报告 |
 | **0.3-alpha** | Multi-channel & Phase Core | 多通道、XY/Lissajous、相位/增益、漂移仿真、频谱热力图 |
 | **0.4-alpha** | Repair Workflow Core | wow/flutter、串扰、阻抗、方位角、前后对比 |
+| **0.5-alpha** | Repair Measurement Suite | THD/THD+N/SNR/SINAD/SFDR、IMD、THD vs 电平 |
 | v1.2 | Safe & Calibrated | 双端不出事、可相信 |
 | v1.3 | Multi-channel & Phase | 双端看得全、看得准 |
 | v1.4 | Repair Workflow | 双端能干活、能交付 |

@@ -4,29 +4,29 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64%20%7C%20Windows%2010%2F11%20x64-lightgrey.svg)](alpha/README.md)
-[![Status](https://img.shields.io/badge/status-0.4.0--alpha.1-orange.svg)](alpha/README.md)
+[![Status](https://img.shields.io/badge/status-0.5.0--alpha.1-orange.svg)](alpha/README.md)
 
-> **0.4-alpha（Repair Workflow Core）**：见 [`alpha/README.md`](alpha/README.md)。
-> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.4.md`](docs/plan/V0.4.md)。
-> 原 v1.1 保留在 tag `v1.1.0-initial`；0.1–0.3-alpha 保留在各自 tag。
+> **0.5-alpha（Repair Measurement Suite）**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.5.md`](docs/plan/V0.5.md)。
+> 原 v1.1 保留在 tag `v1.1.0-initial`；0.1–0.4-alpha 保留在各自 tag。
 >
 > **English** — AudioScope by BerryStudio is a sound-card audio repair workstation:
 > a protected, calibrated, guided measurement flow for macOS and Windows.
-> 0.4-alpha adds wow/flutter, crosstalk, impedance, azimuth and before/after compare;
+> 0.5-alpha adds THD/THD+N/SNR/SINAD/SFDR, IMD and THD-vs-level sweeps;
 > v1.1 is preserved at tag `v1.1.0-initial`.
 
 ---
 
-## 0.4-alpha at a glance
+## 0.5-alpha at a glance
 
 | | |
 |---|---|
 | 定位 | 声卡音频维修工作台，不是通用示波器 |
 | 平台 | macOS 12+ arm64 · Windows 10/11 x64 |
 | 语言 | C11 实时核心 + C++17 应用/平台层 |
-| 当前版本 | `0.4.0-alpha.1`（Repair Workflow Core） |
-| 现在能做 | wow/flutter、串扰、阻抗、方位角、前后对比、多通道测量、XY、频谱热力图、SafetyGuard、校准、JSON/HTML 报告 |
-| 还没做 | 原生 GUI、WASAPI、真实跨设备漂移、THD/IMD、维修模板、PDF |
+| 当前版本 | `0.5.0-alpha.1`（Repair Measurement Suite） |
+| 现在能做 | THD/THD+N/SNR/SINAD/SFDR、IMD、THD 扫描、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准、报告 |
+| 还没做 | 原生 GUI、WASAPI、真实跨设备漂移、维修模板、PDF、THD vs 频率 |
 | 安全 | 软件不能保护声卡；高压/未知信号必须经过受保护前端 |
 
 构建与运行：

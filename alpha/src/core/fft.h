@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.4-alpha — iterative radix-2 FFT (C11, no dependencies). */
+/* AudioScope by BerryStudio 0.5-alpha — iterative radix-2 FFT (C11, no dependencies). */
 #ifndef AS_CORE_FFT_H
 #define AS_CORE_FFT_H
 
