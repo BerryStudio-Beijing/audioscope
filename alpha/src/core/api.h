@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 
+#define AS_BRAND "AudioScope by BerryStudio"
 #define AS_ALPHA_VERSION "0.1.0-alpha.1"
 #define AS_ALPHA_VERSION_MAJOR 0
 #define AS_ALPHA_VERSION_MINOR 1
@@ -28,6 +29,7 @@ typedef enum {
     AS_ERR_RANGE = -5
 } AsStatus;
 
+const char *as_brand_string(void);
 const char *as_version_string(void);
 const char *as_status_string(AsStatus status);
 

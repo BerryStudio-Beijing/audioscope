@@ -1,7 +1,7 @@
-# AudioScope 产品路线图 0.1-alpha → v2.0
+# AudioScope by BerryStudio 产品路线图 0.1-alpha → v2.0
 
 > **定位：声卡音频维修工作台**
-> 项目：Berrystudio Project 2 — AudioScope by Berry & Lan
+> 项目：AudioScope by BerryStudio
 > 代码基线：AudioScope 1.1（macOS 12+ / arm64 / 纯 C / Apache-2.0）
 > 目标平台：macOS 12+ arm64 + Windows 10/11 x64
 > 语言：C11 实时核心 + C++17 应用/平台层

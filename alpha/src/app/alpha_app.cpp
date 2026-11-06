@@ -43,7 +43,7 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "AudioScope %s — sound-card audio repair workstation (alpha)\n"
+        "%s %s — sound-card audio repair workstation (alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
@@ -61,7 +61,7 @@ void print_help() {
         "\n"
         "Alpha caveat: the software can warn and mute, but it cannot protect\n"
         "the sound card from over-voltage. Use a protected front end.\n",
-        as_version_string());
+        as_brand_string(), as_version_string());
 }
 
 std::string render_scope(const std::vector<float> &mono, double fs,
@@ -71,7 +71,7 @@ std::string render_scope(const std::vector<float> &mono, double fs,
     AsciiCanvas c(w, h);
     c.clear(' ');
     c.frame();
-    c.text(2, 1, "AudioScope 0.1-alpha  |  SCOPE  |  1 kHz demo");
+    c.text(2, 1, "AudioScope by BerryStudio  |  SCOPE  |  1 kHz demo");
 
     AsStats st;
     as_stats_compute(mono.data(), (int)mono.size(), fs, &st);
@@ -114,7 +114,7 @@ std::string render_spectrum(const std::vector<double> &mag, double fs,
     AsciiCanvas c(w, h);
     c.clear(' ');
     c.frame();
-    c.text(2, 1, "AudioScope 0.1-alpha  |  FFT  |  Hann 4096  |  log 20 Hz-20 kHz");
+    c.text(2, 1, "AudioScope by BerryStudio  |  FFT  |  Hann 4096  |  log 20 Hz-20 kHz");
 
     int bins = (int)mag.size();
     double maxv = 1e-12;
@@ -150,6 +150,7 @@ int run_self_test() {
     };
 
     check(std::strcmp(as_version_string(), AS_ALPHA_VERSION) == 0, "version string");
+    check(std::strcmp(as_brand_string(), AS_BRAND) == 0, "brand string");
 
     double v = 0.0;
     check(as_units_convert(-20.0, AS_UNIT_DBFS, AS_UNIT_VRMS, 1.0,
@@ -454,7 +455,7 @@ int run_alpha_cli(int argc, char **argv) {
     }
     std::string cmd = argv[1];
     if (cmd == "version" || cmd == "--version" || cmd == "-v") {
-        std::printf("AudioScope %s\n", as_version_string());
+        std::printf("%s %s\n", as_brand_string(), as_version_string());
         std::printf("platform: %s\n", as_platform_name());
         return 0;
     }

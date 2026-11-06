@@ -1,6 +1,6 @@
-# AudioScope 0.1-alpha — Dual Spike
+# AudioScope by BerryStudio — 0.1-alpha (Dual Spike)
 
-> **0.1.0-alpha.1** · macOS + Windows · C11 core + C++17 app · no third-party runtime deps
+> **AudioScope by BerryStudio** · `0.1.0-alpha.1` · macOS + Windows · C11 core + C++17 app · no third-party runtime deps
 > 原 v1.1 保留在 tag `v1.1.0-initial`；本目录是 0.1-alpha 的独立基线。
 
 ## 这是什么

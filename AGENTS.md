@@ -6,7 +6,7 @@
 
 ## 1. 项目上下文
 
-- **产品**：AudioScope — 基于声卡的音频维修工作台。
+- **产品**：AudioScope by BerryStudio — 基于声卡的音频维修工作台。
 - **不是**：通用示波器、RF/超声/DC 测量仪、DAW、声学测量工具。
 - **代码基线**：AudioScope 1.1，macOS 12+ / arm64 / 纯 C11 / Apache-2.0。
 - **目标平台**：macOS 12+ arm64 + Windows 10/11 x64。

@@ -1,6 +1,10 @@
 /* AudioScope 0.1-alpha — version and status strings. */
 #include "core/api.h"
 
+const char *as_brand_string(void) {
+    return AS_BRAND;
+}
+
 const char *as_version_string(void) {
     return AS_ALPHA_VERSION;
 }

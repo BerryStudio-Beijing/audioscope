@@ -1,4 +1,4 @@
-# AudioScope 0.1-alpha — 双端技术预览构想
+# AudioScope by BerryStudio 0.1-alpha — 双端技术预览构想
 
 > 代号：**Dual Spike**
 > 目标平台：macOS 12+（arm64）+ Windows 10/11（x64）

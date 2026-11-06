@@ -1,4 +1,4 @@
-# AudioScope 实施 Backlog
+# AudioScope by BerryStudio 实施 Backlog
 
 > 配套：[`ROADMAP.md`](ROADMAP.md) · [`ALPHA-0.1.md`](ALPHA-0.1.md) · [`AGENTS.md`](AGENTS.md)
 > 用法：按批次取任务 → 复制卡片到 prompt → 按 DoD 验收 → 一个任务一个 PR。

@@ -1,4 +1,4 @@
-# AudioScope 产品路线图包
+# AudioScope by BerryStudio 产品路线图包
 
 > 这是 **规划文档包**，不是代码实现。
 > 目标：把 AudioScope 从“macOS 声卡示波器 1.1”推进到“macOS/Windows 双端音频维修工作台 v2.0”，并让 AI coding agent 能按任务安全地实现。

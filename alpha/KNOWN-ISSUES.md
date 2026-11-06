@@ -1,4 +1,4 @@
-# AudioScope 0.1-alpha — Known Issues
+# AudioScope by BerryStudio — 0.1-alpha Known Issues
 
 > 版本：`0.1.0-alpha.1` · 日期：2026-11-07
 > 这是**架构验证版**，不能用于真实维修决策。
