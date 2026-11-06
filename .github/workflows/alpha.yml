@@ -2,7 +2,7 @@ name: alpha
 
 on:
   push:
-    branches: [ main, alpha/0.1.0 ]
+    branches: [ main, alpha/0.1.0, v0.2 ]
   pull_request:
 
 jobs:
