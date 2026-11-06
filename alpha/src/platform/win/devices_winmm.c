@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — Windows WinMM device enumeration.
+/* AudioScope by BerryStudio 0.2-alpha — Windows WinMM device enumeration.
  *
  * Alpha uses WinMM for a simple, dependency-free first Windows backend.
  * WASAPI/Direct2D are the v1.2 target; this file is intentionally small.

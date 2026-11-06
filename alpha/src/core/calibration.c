@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — versioned single-point calibration profiles. */
+/* AudioScope by BerryStudio 0.2-alpha — versioned calibration profiles. */
 #include "core/api.h"
 
 #include <math.h>
@@ -27,6 +27,8 @@ void as_calibration_init(AsCalibration *cal) {
     cal->schema_version = CAL_SCHEMA;
     cal->input_channel = 0;
     cal->gain_db = 0.0;
+    cal->pad_db = 0.0;
+    cal->sample_rate = 48000;
     cal->fs_volts_rms = 1.0;
     cal->input_impedance_ohm = 10000.0;
     cal->confidence = AS_CONF_ASSUMED;
@@ -46,9 +48,9 @@ static uint64_t fnv1a(uint64_t h, const void *data, size_t n) {
 void as_calibration_seal(AsCalibration *cal) {
     if (!cal) return;
     char canon[512];
-    snprintf(canon, sizeof(canon), "%s|%d|%.9g|%.9g|%.9g|%d|%s",
-             cal->device_id, cal->input_channel, cal->gain_db,
-             cal->fs_volts_rms, cal->input_impedance_ohm,
+    snprintf(canon, sizeof(canon), "%s|%d|%.9g|%.9g|%d|%.9g|%.9g|%d|%s",
+             cal->device_id, cal->input_channel, cal->gain_db, cal->pad_db,
+             cal->sample_rate, cal->fs_volts_rms, cal->input_impedance_ohm,
              (int)cal->confidence, cal->method);
     uint64_t h = 1469598103934665603ULL;
     h = fnv1a(h, canon, strlen(canon));
@@ -88,6 +90,14 @@ int as_calibration_validate(const AsCalibration *cal, char *err, size_t err_len)
     }
     if (cal->input_channel < 0 || cal->input_channel > 15) {
         if (err && err_len) snprintf(err, err_len, "input_channel out of range");
+        return AS_ERR_INVALID;
+    }
+    if (cal->pad_db < -60.0 || cal->pad_db > 60.0 || !isfinite(cal->pad_db)) {
+        if (err && err_len) snprintf(err, err_len, "pad_db out of range");
+        return AS_ERR_INVALID;
+    }
+    if (cal->sample_rate < 8000 || cal->sample_rate > 384000) {
+        if (err && err_len) snprintf(err, err_len, "sample_rate out of range");
         return AS_ERR_INVALID;
     }
     if (!(cal->fs_volts_rms > 0.0) || !isfinite(cal->fs_volts_rms) ||
@@ -197,6 +207,8 @@ int as_calibration_write_json(const AsCalibration *cal, const char *path) {
         "  \"device_id\": \"%s\",\n"
         "  \"input_channel\": %d,\n"
         "  \"gain_db\": %.9g,\n"
+        "  \"pad_db\": %.9g,\n"
+        "  \"sample_rate\": %d,\n"
         "  \"fs_volts_rms\": %.9g,\n"
         "  \"input_impedance_ohm\": %.9g,\n"
         "  \"confidence\": \"%s\",\n"
@@ -205,7 +217,8 @@ int as_calibration_write_json(const AsCalibration *cal, const char *path) {
         "  \"checksum\": \"%s\"\n"
         "}\n",
         copy.schema_version, copy.device_id, copy.input_channel,
-        copy.gain_db, copy.fs_volts_rms, copy.input_impedance_ohm,
+        copy.gain_db, copy.pad_db, copy.sample_rate, copy.fs_volts_rms,
+        copy.input_impedance_ohm,
         as_confidence_name(copy.confidence), copy.method,
         copy.created_at, copy.checksum) > 0;
     if (fclose(f) != 0) ok = 0;
@@ -240,6 +253,10 @@ int as_calibration_read_json(AsCalibration *cal, const char *path) {
         return AS_ERR_INVALID;
     if (!json_double(buf, "gain_db", &cal->gain_db))
         return AS_ERR_INVALID;
+    if (!json_double(buf, "pad_db", &cal->pad_db))
+        cal->pad_db = 0.0;
+    if (!json_int(buf, "sample_rate", &cal->sample_rate))
+        cal->sample_rate = 48000;
     if (!json_double(buf, "fs_volts_rms", &cal->fs_volts_rms))
         return AS_ERR_INVALID;
     if (!json_double(buf, "input_impedance_ohm", &cal->input_impedance_ohm))

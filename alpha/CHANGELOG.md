@@ -1,5 +1,24 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.2.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Input mode presets (Line Pro / Line Consumer / DI / Inst / Mic / Probe) with nominal level, max Vpp, impedance, phantom and front-end requirements.
+- SafetyGuard feed path: clip detection/latch over interleaved frames; range recommendation.
+- Calibration schema v2 extended with `pad_db` and `sample_rate`; per-device/channel/gain/pad/rate profile; CLI calibration wizard.
+- Report schema v2: JSON + self-contained HTML; limits, verdict, repeatability, provenance.
+- `measure` command: capture, limits, verdict, JSON/HTML, session event.
+- `check` command: signal check assistant (peak/RMS/crest/hum/tilt) with advisory suggestion only.
+- `calibrate`/`calibs` commands.
+- Expanded selftest: input modes, clip feed, calibration pad/rate, report JSON/HTML, verdict.
+
+### Changed
+
+- Version 0.2.0-alpha.1.
+- `tone` defaults to −20 dBFS output limit; `--allow-loud` required for higher.
+- Branding: AudioScope by BerryStudio.
+
 ## 0.1.0-alpha.1 — 2026-11-07
 
 ### Added

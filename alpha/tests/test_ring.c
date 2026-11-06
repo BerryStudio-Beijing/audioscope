@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — ring buffer regression test (C11). */
+/* AudioScope by BerryStudio 0.2-alpha — ring buffer regression test (C11). */
 #include "core/ring.h"
 
 #include <stdio.h>

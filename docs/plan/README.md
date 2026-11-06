@@ -14,6 +14,7 @@
 | [`ALPHA-0.1.md`](ALPHA-0.1.md) | 0.1-alpha 双端技术预览：目标/非目标、范围、架构、里程碑、验收、风险 | 工程/产品/试用者 |
 | [`AGENTS.md`](AGENTS.md) | 仓库级硬约束、C/C++ 规则、实时音频规则、安全不变量、DoD、Review 清单 | 所有贡献者 / coding agent |
 | [`BACKLOG.md`](BACKLOG.md) | 任务级 backlog：ID、依赖、验收、测试、prompt seed | 工程 / coding agent |
+| [`V0.2.md`](V0.2.md) | 0.2-alpha 实现与测试记录（对应 v1.2 核心） | 产品/工程/测试 |
 
 建议在仓库中的放置方式：
 
@@ -58,6 +59,7 @@ C11 实时核心 + C++17 应用/平台层；macOS 用 CoreAudio/CoreGraphics，W
 | 版本 | 主题 | 结果 |
 |---|---|---|
 | **0.1-alpha** | Dual Spike | macOS/Windows 跑通同一核心：2ch 示波器/FFT/单点校准/安全最小集 |
+| **0.2-alpha** | Safe & Calibrated Core | 输入模式、SafetyGuard、逐档校准、信号检查、测量、JSON/HTML 报告 |
 | v1.2 | Safe & Calibrated | 双端不出事、可相信 |
 | v1.3 | Multi-channel & Phase | 双端看得全、看得准 |
 | v1.4 | Repair Workflow | 双端能干活、能交付 |
@@ -68,12 +70,12 @@ C11 实时核心 + C++17 应用/平台层；macOS 用 CoreAudio/CoreGraphics，W
 ## 3. 怎么用（人）
 
 1. 先读 `ROADMAP.md` §0–§5，确认定位、双端范围和版本目标。
-2. 再读 `ALPHA-0.1.md`，确认 0.1-alpha 的功能边界与非目标。
+2. 再读 `ALPHA-0.1.md` 与 `V0.2.md`，确认 0.1-alpha 的边界与 0.2-alpha 的实现/测试记录。
 3. 再读 §6/§7 中与你工作相关的规格（安全/校准/多通道/相位/热力图/报告/语言分层）。
-4. 用 `BACKLOG.md` 的 B-alpha 作为 0.1-alpha 执行清单，B0–B5 作为 v1.2 清单。
+4. 用 `BACKLOG.md` 的 B-alpha 作为 0.1-alpha 清单，`V0.2.md` 作为 0.2-alpha 验收记录，B0–B5 作为完整 v1.2 清单。
 5. 每个任务按 `AGENTS.md` 的 DoD 验收；UI 变更必须双端截图。
 
-**建议的第一周（0.1-alpha）**
+**0.1-alpha 已完成；0.2-alpha 的测试记录见 [`V0.2.md`](V0.2.md)。**
 
 - Day 1–2：`LANG-01` CMake/C ABI + `PLAT-02` 双端 CI。
 - Day 3–4：`PLAT-10` 平台抽象 + `CH-07` 无锁化。

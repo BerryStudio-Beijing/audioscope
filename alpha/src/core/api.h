@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — stable C ABI for the portable measurement core.
+/* AudioScope by BerryStudio 0.2-alpha — stable C ABI for the portable measurement core.
  *
  * This header is the boundary between the C11 realtime core and the C++17
  * application/platform layers. It must stay includable from both C and C++,
@@ -15,10 +15,11 @@ extern "C" {
 #endif
 
 #define AS_BRAND "AudioScope by BerryStudio"
-#define AS_ALPHA_VERSION "0.1.0-alpha.1"
-#define AS_ALPHA_VERSION_MAJOR 0
-#define AS_ALPHA_VERSION_MINOR 1
-#define AS_ALPHA_VERSION_PATCH 0
+#define AS_VERSION "0.2.0-alpha.1"
+#define AS_VERSION_MAJOR 0
+#define AS_VERSION_MINOR 2
+#define AS_VERSION_PATCH 0
+#define AS_ALPHA_VERSION AS_VERSION
 
 typedef enum {
     AS_OK = 0,
@@ -54,6 +55,34 @@ AsStatus as_units_convert(double value, AsUnit from, AsUnit to,
                           double fs_volts_rms, double crest, double *out);
 
 /* ------------------------------------------------------------------ */
+/* Input modes                                                         */
+/* ------------------------------------------------------------------ */
+
+typedef enum {
+    AS_MODE_LINE_PRO = 0,
+    AS_MODE_LINE_CONSUMER,
+    AS_MODE_DI,
+    AS_MODE_INST,
+    AS_MODE_MIC,
+    AS_MODE_PROBE,
+    AS_MODE_COUNT
+} AsInputMode;
+
+typedef struct {
+    const char *id;
+    const char *label;
+    double nominal_dbu;
+    double max_vpp;
+    double input_impedance_ohm;
+    int phantom_off_required;
+    int frontend_required;
+} AsInputModeSpec;
+
+const AsInputModeSpec *as_input_mode_spec(AsInputMode mode);
+int as_input_mode_parse(const char *id);
+const char *as_input_mode_id(AsInputMode mode);
+
+/* ------------------------------------------------------------------ */
 /* Safety guard                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -80,6 +109,17 @@ AsStatus as_safety_arm(AsSafetyGuard *guard);
 AsStatus as_safety_start(AsSafetyGuard *guard);
 AsStatus as_safety_clip(AsSafetyGuard *guard, int channel, double peak);
 AsStatus as_safety_reset(AsSafetyGuard *guard);
+AsStatus as_safety_stop(AsSafetyGuard *guard);
+
+/* Scan interleaved stereo frames for clipping. Latches FAULT on the first
+ * overloaded frame and returns the offending channel/peak. */
+AsStatus as_safety_feed(AsSafetyGuard *guard, const float *interleaved,
+                        int frames, int channels, int *clip_channel,
+                        double *clip_peak);
+
+/* Recommend a front-end range for an estimated Vpp. */
+AsStatus as_safety_recommend_range(double vpp, int frontend_present,
+                                   char *out, size_t out_len);
 
 AsSafetyState as_safety_state(const AsSafetyGuard *guard);
 const char *as_safety_state_name(AsSafetyState state);
@@ -100,6 +140,8 @@ typedef struct {
     char device_id[96];
     int input_channel;
     double gain_db;
+    double pad_db;
+    int sample_rate;
     double fs_volts_rms;
     double input_impedance_ohm;
     AsConfidence confidence;

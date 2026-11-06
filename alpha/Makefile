@@ -1,4 +1,4 @@
-# AudioScope 0.1-alpha — macOS build + Windows cross-build.
+# AudioScope by BerryStudio 0.2-alpha — macOS build + Windows cross-build.
 #
 # macOS:  make mac   -> build/audioscope-alpha
 # Windows: make win  -> build/audioscope-alpha.exe (mingw-w64, WinMM)
@@ -26,8 +26,10 @@ CORE_C := \
 	src/core/window.c \
 	src/core/stats.c \
 	src/core/generator.c \
+	src/core/input_mode.c \
 	src/core/safety.c \
 	src/core/calibration.c \
+	src/core/report.c \
 	src/core/session.c
 
 APP_CXX := \
@@ -108,8 +110,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.1.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.1.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-0.2.0-alpha.1-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-0.2.0-alpha.1-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

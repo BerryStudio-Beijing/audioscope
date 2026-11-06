@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — time-domain statistics. */
+/* AudioScope by BerryStudio 0.2-alpha — time-domain statistics. */
 #ifndef AS_CORE_STATS_H
 #define AS_CORE_STATS_H
 

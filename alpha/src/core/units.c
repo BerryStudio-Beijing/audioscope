@@ -1,4 +1,4 @@
-/* AudioScope 0.1-alpha — unit conversions.
+/* AudioScope by BerryStudio 0.2-alpha — unit conversions.
  *
  * dBFS is the only native fact. Voltage requires a calibration full-scale
  * value and, for Vpp, an explicit crest factor assumption.

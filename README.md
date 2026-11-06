@@ -4,29 +4,28 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64%20%7C%20Windows%2010%2F11%20x64-lightgrey.svg)](alpha/README.md)
-[![Status](https://img.shields.io/badge/status-0.1.0--alpha.1-orange.svg)](alpha/README.md)
+[![Status](https://img.shields.io/badge/status-0.2.0--alpha.1-orange.svg)](alpha/README.md)
 
-> **0.1-alpha（Dual Spike）**：见 [`alpha/README.md`](alpha/README.md)。
-> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/ALPHA-0.1.md`](docs/plan/ALPHA-0.1.md)。
-> 原 v1.1 保留在 tag `v1.1.0-initial`；默认分支是 0.1-alpha 双端基线。
+> **0.2-alpha（Safe & Calibrated Core）**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.2.md`](docs/plan/V0.2.md)。
+> 原 v1.1 保留在 tag `v1.1.0-initial`；0.1-alpha 保留在 tag `v0.1.0-alpha.1`。
 >
 > **English** — AudioScope by BerryStudio is a sound-card audio repair workstation:
 > a protected, calibrated, guided measurement flow for macOS and Windows.
-> 0.1-alpha is the dual-platform architecture baseline; v1.1 is preserved at
-> tag `v1.1.0-initial`.
+> 0.2-alpha is the Safe & Calibrated core; v1.1 is preserved at tag `v1.1.0-initial`.
 
 ---
 
-## 0.1-alpha at a glance
+## 0.2-alpha at a glance
 
 | | |
 |---|---|
 | 定位 | 声卡音频维修工作台，不是通用示波器 |
 | 平台 | macOS 12+ arm64 · Windows 10/11 x64 |
 | 语言 | C11 实时核心 + C++17 应用/平台层 |
-| 当前版本 | `0.1.0-alpha.1`（Dual Spike） |
-| 现在能做 | 设备枚举、输入采集、测试音、ASCII 示波器、对数 FFT、单点校准、会话日志、自检 |
-| 还没做 | 原生 GUI、WASAPI、多通道、XY/漂移、热力图、维修模板、PDF 报告 |
+| 当前版本 | `0.2.0-alpha.1`（Safe & Calibrated Core） |
+| 现在能做 | 设备枚举、输入模式、SafetyGuard、clip 锁存、单点校准、信号检查、测量、JSON/HTML 报告、ASCII 示波器/FFT |
+| 还没做 | 原生 GUI、WASAPI、双通道同时测量、多通道、XY/漂移、热力图、维修模板、PDF |
 | 安全 | 软件不能保护声卡；高压/未知信号必须经过受保护前端 |
 
 构建与运行：

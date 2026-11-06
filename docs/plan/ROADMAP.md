@@ -1,11 +1,12 @@
-# AudioScope by BerryStudio 产品路线图 0.1-alpha → v2.0
+# AudioScope by BerryStudio 产品路线图 0.2-alpha → v2.0
 
 > **定位：声卡音频维修工作台**
 > 项目：AudioScope by BerryStudio
 > 代码基线：AudioScope 1.1（macOS 12+ / arm64 / 纯 C / Apache-2.0）
 > 目标平台：macOS 12+ arm64 + Windows 10/11 x64
 > 语言：C11 实时核心 + C++17 应用/平台层
-> 文档版本：1.1 · 2026-11-07 · 状态：Draft for build
+> 文档版本：1.2 · 2026-11-07 · 状态：Draft for build
+> 版本命名：**0.2-alpha** 是路线图 v1.2 “Safe & Calibrated” 的核心子集；不是完整 v1.2。见 [`V0.2.md`](V0.2.md)。
 > 配套文档：[`ALPHA-0.1.md`](ALPHA-0.1.md) · [`AGENTS.md`](AGENTS.md) · [`BACKLOG.md`](BACKLOG.md)
 
 ---
@@ -501,7 +502,7 @@
 5. 故意削波，应用静音并记录事件。
 6. 保存 WAV/CSV/JSON；在 macOS 上用同一文件复测，对比读数。
 
-### 5.3 v1.2 — Safe & Calibrated
+### 5.3 v1.2 — Safe & Calibrated（发布名 0.2-alpha）
 
 **目标**：在 0.1-alpha 已验证的双端架构上，先让测量“不出事、可相信”。
 
