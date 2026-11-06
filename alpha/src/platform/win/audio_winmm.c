@@ -11,10 +11,27 @@
 #include <mmsystem.h>
 
 #include <math.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+typedef volatile LONG AsAtomicInt;
+typedef volatile LONG64 AsAtomicU64;
+static int as_atomic_load_int(const AsAtomicInt *p) { return (int)*p; }
+static void as_atomic_store_int(AsAtomicInt *p, int v) { InterlockedExchange(p, (LONG)v); }
+static uint64_t as_atomic_load_u64(const AsAtomicU64 *p) { return (uint64_t)*p; }
+static void as_atomic_store_u64(AsAtomicU64 *p, uint64_t v) { InterlockedExchange64(p, (LONG64)v); }
+#else
+#include <stdatomic.h>
+typedef _Atomic int AsAtomicInt;
+typedef _Atomic uint64_t AsAtomicU64;
+static int as_atomic_load_int(const AsAtomicInt *p) { return atomic_load_explicit(p, memory_order_relaxed); }
+static void as_atomic_store_int(AsAtomicInt *p, int v) { atomic_store_explicit(p, v, memory_order_relaxed); }
+static uint64_t as_atomic_load_u64(const AsAtomicU64 *p) { return atomic_load_explicit(p, memory_order_relaxed); }
+static void as_atomic_store_u64(AsAtomicU64 *p, uint64_t v) { atomic_store_explicit(p, v, memory_order_relaxed); }
+#endif
 
 #define AS_WIN_BLOCK 512
 #define AS_WIN_BUFFERS 4
@@ -31,9 +48,9 @@ struct AsAudio {
     double fs;
     int block;
     int running;
-    _Atomic int tone_on;
-    _Atomic uint64_t freq_bits;
-    _Atomic uint64_t amp_bits;
+    AsAtomicInt tone_on;
+    AsAtomicU64 freq_bits;
+    AsAtomicU64 amp_bits;
     double phase;
 };
 
@@ -77,9 +94,9 @@ static void CALLBACK in_callback(HWAVEIN h, UINT msg, DWORD_PTR user,
 }
 
 static void fill_output(AsAudio *a, short *dst, int frames) {
-    int on = atomic_load_explicit(&a->tone_on, memory_order_relaxed);
-    double freq = bits_double(atomic_load_explicit(&a->freq_bits, memory_order_relaxed));
-    double amp = bits_double(atomic_load_explicit(&a->amp_bits, memory_order_relaxed));
+    int on = as_atomic_load_int(&a->tone_on);
+    double freq = bits_double(as_atomic_load_u64(&a->freq_bits));
+    double amp = bits_double(as_atomic_load_u64(&a->amp_bits));
     double step = on ? 2.0 * AS_PI * freq / a->fs : 0.0;
     for (int i = 0; i < frames; ++i) {
         double v = 0.0;
@@ -121,9 +138,15 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     }
     a->fs = fs;
     a->block = block > 0 ? block : AS_WIN_BLOCK;
+#if defined(_MSC_VER)
+    a->tone_on = 0;
+    a->freq_bits = (LONG64)double_bits(1000.0);
+    a->amp_bits = (LONG64)double_bits(0.1);
+#else
     atomic_init(&a->tone_on, 0);
     atomic_init(&a->freq_bits, double_bits(1000.0));
     atomic_init(&a->amp_bits, double_bits(0.1));
+#endif
     if (as_ring_init(&a->ring, (uint32_t)(fs * 4.0), 2) != 0) {
         set_error("ring allocation failed");
         free(a);
@@ -222,9 +245,9 @@ int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
     if (!a) return -1;
     if (!(freq >= 1.0) || freq > 20000.0) return -1;
     if (!(amp >= 0.0) || amp > 1.0) return -1;
-    atomic_store_explicit(&a->freq_bits, double_bits(freq), memory_order_relaxed);
-    atomic_store_explicit(&a->amp_bits, double_bits(amp), memory_order_relaxed);
-    atomic_store_explicit(&a->tone_on, on ? 1 : 0, memory_order_relaxed);
+    as_atomic_store_u64(&a->freq_bits, double_bits(freq));
+    as_atomic_store_u64(&a->amp_bits, double_bits(amp));
+    as_atomic_store_int(&a->tone_on, on ? 1 : 0);
     return 0;
 }
 

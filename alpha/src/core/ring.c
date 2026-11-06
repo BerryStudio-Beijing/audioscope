@@ -23,7 +23,7 @@ int as_ring_init(AsRing *ring, uint32_t capacity_frames, uint32_t channels) {
 void as_ring_reset(AsRing *ring) {
     if (!ring || !ring->data) return;
     memset(ring->data, 0, (size_t)ring->cap * ring->channels * sizeof(float));
-    ring->write_frames = 0;
+    as_atomic_store_u32(&ring->write_frames, 0);
 }
 
 void as_ring_free(AsRing *ring) {
@@ -34,7 +34,7 @@ void as_ring_free(AsRing *ring) {
 
 void as_ring_write(AsRing *ring, const float *interleaved, int frames) {
     if (!ring || !ring->data || !interleaved || frames <= 0) return;
-    uint32_t w = ring->write_frames;
+    uint32_t w = as_atomic_load_u32(&ring->write_frames);
     for (int i = 0; i < frames; ++i) {
         uint32_t slot = (w + (uint32_t)i) & ring->mask;
         for (uint32_t c = 0; c < ring->channels; ++c) {
@@ -42,12 +42,12 @@ void as_ring_write(AsRing *ring, const float *interleaved, int frames) {
                 interleaved[(size_t)i * ring->channels + c];
         }
     }
-    ring->write_frames = w + (uint32_t)frames;
+    as_atomic_store_u32(&ring->write_frames, w + (uint32_t)frames);
 }
 
 int as_ring_read_latest(AsRing *ring, float *dst, int frames) {
     if (!ring || !ring->data || !dst || frames <= 0) return 0;
-    uint32_t w = ring->write_frames;
+    uint32_t w = as_atomic_load_u32(&ring->write_frames);
     uint32_t available = w < ring->cap ? w : ring->cap;
     uint32_t take = (uint32_t)frames < available ? (uint32_t)frames : available;
     uint32_t start = w - take;
@@ -63,6 +63,6 @@ int as_ring_read_latest(AsRing *ring, float *dst, int frames) {
 
 int as_ring_filled(const AsRing *ring) {
     if (!ring) return 0;
-    uint32_t w = ring->write_frames;
+    uint32_t w = as_atomic_load_u32(&ring->write_frames);
     return (int)(w < ring->cap ? w : ring->cap);
 }
