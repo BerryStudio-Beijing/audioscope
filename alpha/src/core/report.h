@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — measurement report (JSON + HTML). */
+/* AudioScope by BerryStudio 0.3-alpha — measurement report (JSON + HTML). */
 #ifndef AS_CORE_REPORT_H
 #define AS_CORE_REPORT_H
 
@@ -28,6 +28,8 @@ typedef struct {
     int clip_count;
 } AsChannelMeasurement;
 
+#define AS_MAX_REPORT_CH 8
+
 typedef struct {
     int schema_version;
     char run_id[64];
@@ -43,7 +45,7 @@ typedef struct {
     double fs_volts_rms;
     AsLimits limits;
     int channels;
-    AsChannelMeasurement ch[2];
+    AsChannelMeasurement ch[AS_MAX_REPORT_CH];
     int repeat_count;
     double vpp_std;
     double freq_std;

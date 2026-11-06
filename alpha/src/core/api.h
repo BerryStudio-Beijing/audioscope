@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — stable C ABI for the portable measurement core.
+/* AudioScope by BerryStudio 0.3-alpha — stable C ABI for the portable measurement core.
  *
  * This header is the boundary between the C11 realtime core and the C++17
  * application/platform layers. It must stay includable from both C and C++,
@@ -15,9 +15,9 @@ extern "C" {
 #endif
 
 #define AS_BRAND "AudioScope by BerryStudio"
-#define AS_VERSION "0.2.0-alpha.1"
+#define AS_VERSION "0.3.0-alpha.1"
 #define AS_VERSION_MAJOR 0
-#define AS_VERSION_MINOR 2
+#define AS_VERSION_MINOR 3
 #define AS_VERSION_PATCH 0
 #define AS_ALPHA_VERSION AS_VERSION
 
@@ -177,17 +177,24 @@ int as_session_count(const AsSession *session);
 /* Platform device enumeration                                         */
 /* ------------------------------------------------------------------ */
 
+struct AsAudio;
+
 typedef struct {
     char id[96];
     char name[160];
     int is_input;
     int is_output;
-    int channels;
+    int channels;       /* max(in, out), kept for compatibility */
+    int in_channels;
+    int out_channels;
     double sample_rate;
 } AsDeviceInfo;
 
 int as_platform_list_devices(AsDeviceInfo *out, int max);
 const char *as_platform_name(void);
+
+/* Number of interleaved input channels returned by as_audio_read(). */
+int as_audio_channels(const struct AsAudio *audio);
 
 #ifdef __cplusplus
 } /* extern "C" */

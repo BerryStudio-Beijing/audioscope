@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — macOS CoreAudio device enumeration. */
+/* AudioScope by BerryStudio 0.3-alpha — macOS CoreAudio device enumeration. */
 #include "core/api.h"
 
 #include <CoreAudio/CoreAudio.h>
@@ -94,6 +94,8 @@ int as_platform_list_devices(AsDeviceInfo *out, int max) {
         d->is_input = in_ch > 0;
         d->is_output = out_ch > 0;
         d->channels = in_ch > out_ch ? in_ch : out_ch;
+        d->in_channels = in_ch;
+        d->out_channels = out_ch;
         d->sample_rate = device_rate(ids[i]);
         ++n;
     }

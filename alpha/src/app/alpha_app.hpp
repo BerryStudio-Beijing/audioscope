@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — command-line/TUI application entry. */
+/* AudioScope by BerryStudio 0.3-alpha — command-line/TUI application entry. */
 #ifndef AS_APP_ALPHA_APP_HPP
 #define AS_APP_ALPHA_APP_HPP
 

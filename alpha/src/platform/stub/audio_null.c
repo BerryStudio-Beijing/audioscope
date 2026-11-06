@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — null backend for platforms without an audio layer. */
+/* AudioScope by BerryStudio 0.3-alpha — null backend for platforms without an audio layer. */
 #include "platform/audio_backend.h"
 #include "core/ring.h"
 
@@ -46,6 +46,11 @@ int as_audio_read(AsAudio *a, float *dst, int frames) {
 int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
     (void)a; (void)freq; (void)amp; (void)on;
     return 0;
+}
+
+int as_audio_channels(const AsAudio *a) {
+    (void)a;
+    return 2;
 }
 
 double as_audio_rate(const AsAudio *a) {

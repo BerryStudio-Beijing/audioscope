@@ -1,4 +1,4 @@
-# AudioScope by BerryStudio 产品路线图 0.2-alpha → v2.0
+# AudioScope by BerryStudio 产品路线图 0.3-alpha → v2.0
 
 > **定位：声卡音频维修工作台**
 > 项目：AudioScope by BerryStudio
@@ -6,7 +6,7 @@
 > 目标平台：macOS 12+ arm64 + Windows 10/11 x64
 > 语言：C11 实时核心 + C++17 应用/平台层
 > 文档版本：1.2 · 2026-11-07 · 状态：Draft for build
-> 版本命名：**0.2-alpha** 是路线图 v1.2 “Safe & Calibrated” 的核心子集；不是完整 v1.2。见 [`V0.2.md`](V0.2.md)。
+> 版本命名：**0.3-alpha** 是路线图 v1.3 “Multi-channel & Phase” 的核心子集；0.2-alpha 是 v1.2 核心，见 [`V0.2.md`](V0.2.md) / [`V0.3.md`](V0.3.md)。
 > 配套文档：[`ALPHA-0.1.md`](ALPHA-0.1.md) · [`AGENTS.md`](AGENTS.md) · [`BACKLOG.md`](BACKLOG.md)
 
 ---
@@ -546,7 +546,7 @@
 6. 导出 HTML 报告。
 7. 在 Windows 上打开同一报告/同一 WAV，确认读数一致。
 
-### 5.4 v1.3 — Multi-channel & Phase
+### 5.4 v1.3 — Multi-channel & Phase（发布名 0.3-alpha）
 
 **目标**：在双端上让测量“看得全、看得准”。
 

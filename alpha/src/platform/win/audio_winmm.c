@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — Windows WinMM backend (2ch int16, 48 kHz).
+/* AudioScope by BerryStudio 0.3-alpha — Windows WinMM backend (2ch int16, 48 kHz).
  *
  * This is the alpha fallback. It is deliberately simple: 4 queued buffers,
  * int16 PCM, WAVE_MAPPER by default. WASAPI is the v1.2 target.
@@ -249,6 +249,11 @@ int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
     as_atomic_store_u64(&a->amp_bits, double_bits(amp));
     as_atomic_store_int(&a->tone_on, on ? 1 : 0);
     return 0;
+}
+
+int as_audio_channels(const AsAudio *a) {
+    (void)a;
+    return 2;
 }
 
 double as_audio_rate(const AsAudio *a) {

@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — input mode presets. */
+/* AudioScope by BerryStudio 0.3-alpha — input mode presets. */
 #include "core/api.h"
 
 #include <ctype.h>

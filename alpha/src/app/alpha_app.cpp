@@ -3,7 +3,9 @@
 #include "core/api.h"
 #include "core/fft.h"
 #include "core/generator.h"
+#include "core/phase.h"
 #include "core/report.h"
+#include "core/spectrogram.h"
 #include "core/stats.h"
 #include "core/window.h"
 #include "platform/audio_backend.h"
@@ -52,14 +54,17 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "%s %s — sound-card audio repair workstation (0.2-alpha)\n"
+        "%s %s — sound-card audio repair workstation (0.3-alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
         "  audioscope-alpha devices\n"
         "  audioscope-alpha modes\n"
-        "  audioscope-alpha monitor [seconds] [--mode M] [--frontend] [--vpp V] [--cal FILE] [--channel 0|1]\n"
+        "  audioscope-alpha monitor [seconds] [--mode M] [--frontend] [--vpp V] [--cal FILE] [--channel N]\n"
         "  audioscope-alpha check [seconds] [--synthetic]\n"
+        "  audioscope-alpha xy [seconds] [--simulate --phase DEG --gain DB --drift PPM] [--ch1 N --ch2 N]\n"
+        "  audioscope-alpha drift [seconds] [--simulate PPM] [--live]\n"
+        "  audioscope-alpha spectrogram [seconds] [--synthetic] [--channel N]\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -70,7 +75,7 @@ void print_help() {
         "                              --dbfs -20 --measured-vrms V --confidence measured|datasheet|assumed\n"
         "  audioscope-alpha calibs [dir]\n"
         "  audioscope-alpha measure [seconds] [--cal FILE] [--mode M] [--frontend] [--vpp V]\n"
-        "                           [--channel 0|1] [--out DIR] [--repeat N]\n"
+        "                           [--channel N] [--channels all|0,1] [--out DIR] [--repeat N]\n"
         "                           [--max-vpp V] [--min-rms V] [--max-clip N]\n"
         "  audioscope-alpha selftest\n"
         "  audioscope-alpha help\n"
@@ -233,31 +238,50 @@ std::string render_spectrum(const std::vector<double> &mag, double fs,
     return c.to_string();
 }
 
-int capture_seconds(AsAudio *audio, double seconds, int channel,
-                    std::vector<float> *out, int *clip_count) {
+int capture_interleaved(AsAudio *audio, double seconds,
+                        std::vector<float> *out, std::vector<int> *clips) {
     if (!audio || !out) return 0;
+    int channels = as_audio_channels(audio);
+    if (channels < 1) channels = 2;
+    if (channels > 8) channels = 8;
     out->clear();
-    if (clip_count) *clip_count = 0;
+    if (clips) clips->assign((size_t)channels, 0);
     double fs = as_audio_rate(audio);
     if (!(fs > 0.0)) fs = kSampleRate;
-    int target = (int)(seconds * fs);
-    if (target <= 0) target = kScopeFrames;
-    std::vector<float> buf((size_t)kChunkFrames * 2, 0.0f);
+    int target_frames = (int)(seconds * fs);
+    if (target_frames <= 0) target_frames = kScopeFrames;
+    std::vector<float> buf((size_t)kChunkFrames * (size_t)channels, 0.0f);
+    int frames = 0;
     auto start = std::chrono::steady_clock::now();
-    while ((int)out->size() < target) {
+    while (frames < target_frames) {
         auto now = std::chrono::steady_clock::now();
         double elapsed = std::chrono::duration<double>(now - start).count();
         if (elapsed > seconds + 3.0) break;
         int got = as_audio_read(audio, buf.data(), kChunkFrames);
         for (int i = 0; i < got; ++i) {
-            float v = buf[(size_t)i * 2 + channel];
-            out->push_back(v);
-            if (clip_count && std::fabs(v) >= 0.999f) ++*clip_count;
+            for (int c = 0; c < channels; ++c) {
+                float v = buf[(size_t)i * (size_t)channels + (size_t)c];
+                out->push_back(v);
+                if (clips && std::fabs(v) >= 0.999f) ++(*clips)[(size_t)c];
+            }
         }
+        frames += got;
         if (got <= 0) std::this_thread::sleep_for(std::chrono::milliseconds(2));
         else std::this_thread::sleep_for(std::chrono::milliseconds(8));
     }
-    return (int)out->size();
+    return frames;
+}
+
+void extract_channel(const std::vector<float> &interleaved, int channels,
+                     int channel, std::vector<float> *mono) {
+    if (!mono) return;
+    mono->clear();
+    if (channels < 1 || channel < 0 || channel >= channels) return;
+    mono->reserve(interleaved.size() / (size_t)channels);
+    for (size_t i = 0; i + (size_t)channels <= interleaved.size();
+         i += (size_t)channels) {
+        mono->push_back(interleaved[i + (size_t)channel]);
+    }
 }
 
 AsStatus precheck_guard(AsSafetyGuard *guard, AsInputMode mode,
@@ -381,6 +405,56 @@ int run_self_test() {
           "fft 1 kHz peak");
     as_fft_free(&fft);
 
+    const int pn = 8192;
+    std::vector<float> pa(pn), pb(pn);
+    for (int i = 0; i < pn; ++i) {
+        double t = (double)i / kSampleRate;
+        pa[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t));
+        pb[(size_t)i] = (float)(0.5 * std::pow(10.0, 3.0 / 20.0) *
+            std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t +
+                     45.0 * 3.14159265358979323846 / 180.0));
+    }
+    AsPhaseResult pr;
+    check(as_phase_measure(pa.data(), pb.data(), pn, kSampleRate, &pr) == 0 &&
+              std::fabs(pr.phase_deg - 45.0) < 2.0 &&
+              std::fabs(pr.gain_db - 3.0) < 0.2,
+          "phase/gain 45 deg +3 dB");
+
+    const int dn = 5 * kSampleRate;
+    std::vector<float> da(dn), db(dn);
+    for (int i = 0; i < dn; ++i) {
+        double t = (double)i / kSampleRate;
+        da[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t));
+        db[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.1 * t));
+    }
+    double ppm = 0.0, drift_f = 0.0;
+    check(as_drift_estimate(da.data(), db.data(), dn, kSampleRate, 4096,
+                            &ppm, &drift_f) == 0 &&
+              std::fabs(ppm - 100.0) < 10.0,
+          "drift 100 ppm");
+
+    AsSpectrogram spec;
+    check(as_spectrogram_init(&spec, 16, 24, 20.0, 20000.0) == 0, "spectrogram init");
+    std::vector<double> sx(2048), sw(2048), sm(1025);
+    for (int i = 0; i < 2048; ++i)
+        sx[(size_t)i] = 0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 *
+                                      (double)i / kSampleRate);
+    as_window_hann(sw.data(), 2048);
+    for (int i = 0; i < 2048; ++i) sx[(size_t)i] *= sw[(size_t)i];
+    AsFft sfft;
+    check(as_fft_init(&sfft, 2048) == 0, "spectrogram fft");
+    as_fft_forward(&sfft, sx.data(), sm.data(), 2048);
+    as_spectrogram_push(&spec, sm.data(), 2048, kSampleRate);
+    float spec_best = -120.0f;
+    int spec_row = 0;
+    for (int row = 0; row < spec.rows; ++row) {
+        float v = as_spectrogram_get(&spec, 0, row);
+        if (v > spec_best) { spec_best = v; spec_row = row; }
+    }
+    check(spec_best > -10.0f && spec_row >= 11 && spec_row <= 15, "spectrogram 1 kHz");
+    as_fft_free(&sfft);
+    as_spectrogram_free(&spec);
+
     AsStats st;
     as_stats_compute(sig.data(), kFftSize, kSampleRate, &st);
     AsReport rep;
@@ -468,6 +542,256 @@ int cmd_fft() {
     return 0;
 }
 
+std::string render_xy(const std::vector<float> &x, const std::vector<float> &y,
+                      const AsPhaseResult &pr) {
+    const int w = 60;
+    const int h = 28;
+    AsciiCanvas c(w, h);
+    c.clear(' ');
+    c.frame();
+    c.text(2, 1, "AudioScope by BerryStudio  |  XY / Lissajous");
+    int midx = w / 2, midy = h / 2;
+    c.vline(midx, 3, h - 3, '.');
+    c.hline(2, w - 3, midy, '.');
+    double mx = 1e-9, my = 1e-9;
+    for (float v : x) mx = std::max(mx, (double)std::fabs(v));
+    for (float v : y) my = std::max(my, (double)std::fabs(v));
+    size_t n = std::min(x.size(), y.size());
+    size_t limit = std::min<size_t>(n, 8000);
+    for (size_t i = 0; i < limit; ++i) {
+        int px = midx + (int)std::lround((double)x[i] / mx * (double)(w / 2 - 3));
+        int py = midy - (int)std::lround((double)y[i] / my * (double)(h / 2 - 4));
+        if (px > 1 && px < w - 2 && py > 2 && py < h - 2) c.put(px, py, '*');
+    }
+    char line[128];
+    std::snprintf(line, sizeof(line), "phase %.1f deg  gain %.2f dB  %s",
+                  pr.phase_deg, pr.gain_db,
+                  std::fabs(pr.phase_deg) > 135.0 ? "POLARITY INVERTED" : "polarity normal");
+    c.text(2, h - 2, line);
+    return c.to_string();
+}
+
+int cmd_xy(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 2.0);
+    if (seconds < 0.2) seconds = 0.2;
+    if (seconds > 30.0) seconds = 30.0;
+    bool simulate = has_flag(args, "--simulate");
+    double phase_deg = opt_num(args, "--phase", 45.0);
+    double gain_db = opt_num(args, "--gain", 0.0);
+    double drift_ppm = opt_num(args, "--drift", 0.0);
+    int ch1 = opt_int(args, "--ch1", 0);
+    int ch2 = opt_int(args, "--ch2", 1);
+    double fs = kSampleRate;
+    std::vector<float> a, b;
+    bool simulated = simulate;
+    if (simulate) {
+        int n = (int)(seconds * fs);
+        a.resize((size_t)n);
+        b.resize((size_t)n);
+        double g = std::pow(10.0, gain_db / 20.0);
+        double pr = phase_deg * 3.14159265358979323846 / 180.0;
+        double f2 = 1000.0 * (1.0 + drift_ppm * 1e-6);
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            a[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t));
+            b[(size_t)i] = (float)(0.5 * g * std::sin(2.0 * 3.14159265358979323846 * f2 * t + pr));
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 2) {
+            std::fprintf(stderr, "XY needs at least 2 input channels; device reports %d\n", channels);
+            as_audio_close(audio);
+            return 1;
+        }
+        if (ch1 < 0 || ch1 >= channels) ch1 = 0;
+        if (ch2 < 0 || ch2 >= channels) ch2 = 1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, ch1, &a);
+        extract_channel(interleaved, channels, ch2, &b);
+        as_audio_close(audio);
+    }
+
+    AsPhaseResult pr;
+    if (as_phase_measure(a.data(), b.data(), (int)std::min(a.size(), b.size()), fs, &pr) != 0) {
+        std::fprintf(stderr, "phase measurement failed (no stable fundamental)\n");
+        return 1;
+    }
+    std::printf("%s\n", render_xy(a, b, pr).c_str());
+    std::printf("CH%d vs CH%d: phase %.2f deg, gain %.2f dB, freq %.1f Hz\n",
+                ch1 + 1, ch2 + 1, pr.phase_deg, pr.gain_db, pr.freq_hz);
+    if (simulated) {
+        std::printf("simulated phase %.1f deg, gain %.2f dB, drift %.1f ppm\n",
+                    phase_deg, gain_db, drift_ppm);
+    } else {
+        std::printf("live same-device channels share a clock; drift is not observable here.\n");
+    }
+    if (std::fabs(pr.phase_deg) > 135.0)
+        std::printf("POLARITY: inverted (or ~180 deg phase)\n");
+    return 0;
+}
+
+int cmd_drift(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 5.0);
+    if (seconds < 1.0) seconds = 1.0;
+    if (seconds > 30.0) seconds = 30.0;
+    bool live = has_flag(args, "--live");
+    double ppm_in = opt_num(args, "--simulate", 100.0);
+    double freq = opt_num(args, "--freq", 1000.0);
+    double fs = kSampleRate;
+    std::vector<float> a, b;
+    if (live) {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 2) {
+            std::fprintf(stderr, "drift needs 2 channels; device reports %d\n", channels);
+            as_audio_close(audio);
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &a);
+        extract_channel(interleaved, channels, 1, &b);
+        as_audio_close(audio);
+        std::printf("live same-device capture: CH1/CH2 share a clock; ppm is not observable.\n");
+        std::printf("Use two devices / an aggregate device, or --simulate N for the algorithm.\n");
+        return 0;
+    } else {
+        int n = (int)(seconds * fs);
+        a.resize((size_t)n);
+        b.resize((size_t)n);
+        double f2 = freq * (1.0 + ppm_in * 1e-6);
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            a[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * freq * t));
+            b[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * f2 * t));
+        }
+    }
+    double ppm = 0.0, f = 0.0;
+    if (as_drift_estimate(a.data(), b.data(), (int)std::min(a.size(), b.size()),
+                          fs, 4096, &ppm, &f) != 0) {
+        std::fprintf(stderr, "drift estimate failed (need more blocks)\n");
+        return 1;
+    }
+    std::printf("drift estimate: %.2f ppm at %.1f Hz", ppm, f);
+    if (!live) std::printf(" (injected %.2f ppm)", ppm_in);
+    std::printf("\n");
+    return 0;
+}
+
+std::string render_spectrogram(const AsSpectrogram &spec, double peak_hz) {
+    const int w = 78;
+    const int h = 24;
+    AsciiCanvas c(w, h);
+    c.clear(' ');
+    c.frame();
+    c.text(2, 1, "AudioScope by BerryStudio  |  SPECTROGRAM  |  20 Hz-20 kHz");
+    const char *ramp = " .:-=+*#%@";
+    const int plot_rows = h - 5;
+    for (int yy = 0; yy < plot_rows; ++yy) {
+        int row = yy * (spec.rows - 1) / std::max(1, plot_rows - 1);
+        int y = h - 3 - yy;
+        for (int age = 0; age < spec.count; ++age) {
+            int x = 1 + age * (w - 2) / std::max(1, spec.count - 1);
+            float db = as_spectrogram_get(&spec, age, row);
+            int idx = (int)std::lround((std::clamp(db, -80.0f, 0.0f) + 80.0) / 80.0 * 9.0);
+            c.put(x, y, ramp[std::clamp(idx, 0, 9)]);
+        }
+    }
+    char line[128];
+    std::snprintf(line, sizeof(line), "peak %.1f Hz   %d frames   -80..0 dB", peak_hz, spec.count);
+    c.text(2, h - 2, line);
+    return c.to_string();
+}
+
+int cmd_spectrogram(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 3.0);
+    if (seconds < 0.5) seconds = 0.5;
+    if (seconds > 30.0) seconds = 30.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    int channel = opt_int(args, "--channel", 0);
+    std::vector<float> frame;
+    double fs = kSampleRate;
+    if (synthetic) {
+        int n = (int)(seconds * fs);
+        frame.resize((size_t)n);
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            double v = 0.35 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t)
+                     + 0.15 * std::sin(2.0 * 3.14159265358979323846 * 3000.0 * t)
+                     + 0.08 * std::sin(2.0 * 3.14159265358979323846 * 5000.0 * t);
+            frame[(size_t)i] = (float)v;
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channel < 0 || channel >= channels) channel = 0;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, channel, &frame);
+        as_audio_close(audio);
+    }
+
+    const int nfft = 2048;
+    const int hop = 512;
+    AsSpectrogram spec;
+    if (as_spectrogram_init(&spec, 80, 96, 20.0, 20000.0) != 0) {
+        std::fprintf(stderr, "spectrogram init failed\n");
+        return 1;
+    }
+    AsFft fft;
+    if (as_fft_init(&fft, nfft) != 0) {
+        std::fprintf(stderr, "fft init failed\n");
+        as_spectrogram_free(&spec);
+        return 1;
+    }
+    std::vector<double> x((size_t)nfft), win((size_t)nfft), mag((size_t)nfft / 2 + 1);
+    as_window_hann(win.data(), nfft);
+    for (int start = 0; start + nfft <= (int)frame.size(); start += hop) {
+        for (int i = 0; i < nfft; ++i) x[(size_t)i] = (double)frame[(size_t)(start + i)];
+        for (int i = 0; i < nfft; ++i) x[(size_t)i] *= win[(size_t)i];
+        as_fft_forward(&fft, x.data(), mag.data(), nfft);
+        as_spectrogram_push(&spec, mag.data(), nfft, fs);
+    }
+    float best = -120.0f;
+    int best_row = 0;
+    for (int row = 0; row < spec.rows; ++row) {
+        for (int age = 0; age < spec.count; ++age) {
+            float db = as_spectrogram_get(&spec, age, row);
+            if (db > best) { best = db; best_row = row; }
+        }
+    }
+    double peak_hz = spec.fmin * std::pow(spec.fmax / spec.fmin,
+        spec.rows > 1 ? (double)best_row / (double)(spec.rows - 1) : 0.0);
+    std::printf("%s", render_spectrogram(spec, peak_hz).c_str());
+    std::printf("peak row %d ≈ %.1f Hz · %.1f dB relative\n", best_row, peak_hz, best);
+    as_fft_free(&fft);
+    as_spectrogram_free(&spec);
+    return 0;
+}
+
 int cmd_devices() {
     AsDeviceInfo devs[64];
     int n = as_platform_list_devices(devs, 64);
@@ -477,9 +801,9 @@ int cmd_devices() {
         return 0;
     }
     for (int i = 0; i < n; ++i) {
-        std::printf("%2d  %-40s  %s%s  ch=%d  %.0f Hz\n", i, devs[i].name,
+        std::printf("%2d  %-36s  %s%s  in=%d out=%d  %.0f Hz\n", i, devs[i].name,
                     devs[i].is_input ? "IN " : "", devs[i].is_output ? "OUT" : "",
-                    devs[i].channels, devs[i].sample_rate);
+                    devs[i].in_channels, devs[i].out_channels, devs[i].sample_rate);
     }
     return 0;
 }
@@ -522,11 +846,14 @@ int cmd_monitor(const std::vector<std::string> &args) {
         as_safety_destroy(guard);
         return 1;
     }
-    std::printf("monitoring input for %.1f s; mode %s; Ctrl-C to stop\n",
-                seconds, as_input_mode_id(mode));
+    int channels = as_audio_channels(audio);
+    if (channels < 1) channels = 2;
+    if (channel >= channels) channel = 0;
+    std::printf("monitoring input for %.1f s; mode %s; %d ch; Ctrl-C to stop\n",
+                seconds, as_input_mode_id(mode), channels);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
-    std::vector<float> buf((size_t)kChunkFrames * 2, 0.0f);
+    std::vector<float> buf((size_t)kChunkFrames * (size_t)channels, 0.0f);
     std::vector<float> history((size_t)kScopeFrames, 0.0f);
     auto start = std::chrono::steady_clock::now();
     int frame_no = 0;
@@ -540,7 +867,7 @@ int cmd_monitor(const std::vector<std::string> &args) {
         if (got > 0) {
             int clip_ch = -1;
             double clip_peak = 0.0;
-            if (as_safety_feed(guard, buf.data(), got, 2, &clip_ch, &clip_peak) != AS_OK ||
+            if (as_safety_feed(guard, buf.data(), got, channels, &clip_ch, &clip_peak) != AS_OK ||
                 as_safety_state(guard) == AS_SAFETY_FAULT) {
                 std::printf("\x1b[2J\x1b[H");
                 std::printf("FAULT: %s\n", as_safety_reason(guard));
@@ -548,7 +875,7 @@ int cmd_monitor(const std::vector<std::string> &args) {
             }
             history.erase(history.begin(), history.begin() + std::min(got, (int)history.size()));
             for (int i = 0; i < got && (int)history.size() < kScopeFrames; ++i)
-                history.push_back(buf[(size_t)i * 2 + channel]);
+                history.push_back(buf[(size_t)i * (size_t)channels + (size_t)channel]);
         }
         AsStats st;
         std::string frame = render_scope(history, as_audio_rate(audio), &st,
@@ -648,7 +975,7 @@ int cmd_session(const std::string &dir) {
         std::fprintf(stderr, "session create failed\n");
         return 1;
     }
-    as_session_event(s, "app_start", "{\"version\":\"0.2.0-alpha.1\"}");
+    as_session_event(s, "app_start", "{\"version\":\"0.3.0-alpha.1\"}");
     as_session_event(s, "input_mode", "{\"mode\":\"inst\"}");
     as_session_event(s, "note", "{\"text\":\"v0.2 session demo\"}");
     std::printf("session: %s (%d events)\n", as_session_path(s), as_session_count(s));
@@ -747,6 +1074,8 @@ int cmd_check(const std::vector<std::string> &args) {
     double seconds = positional_num(args, 1.0);
     bool synthetic = has_flag(args, "--synthetic");
     std::vector<float> frame;
+    std::vector<float> interleaved;
+    std::vector<int> clips;
     int clip_count = 0;
     AsAudio *audio = nullptr;
     if (!synthetic) {
@@ -764,7 +1093,11 @@ int cmd_check(const std::vector<std::string> &args) {
         as_generator_sine(&gen, 1000.0, 0.05, frame.data(), (int)frame.size());
     } else {
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        capture_seconds(audio, seconds, 0, &frame, &clip_count);
+        int channels = as_audio_channels(audio);
+        if (channels < 1) channels = 2;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        extract_channel(interleaved, channels, 0, &frame);
+        clip_count = clips.empty() ? 0 : clips[0];
     }
 
     AsStats st;
@@ -829,8 +1162,6 @@ int cmd_measure(const std::vector<std::string> &args) {
     if (seconds < 0.2) seconds = 0.2;
     if (seconds > 30.0) seconds = 30.0;
     AsInputMode mode = mode_from_args(args);
-    int channel = opt_int(args, "--channel", 0);
-    if (channel < 0 || channel > 1) channel = 0;
     int repeat = opt_int(args, "--repeat", 1);
     if (repeat < 1) repeat = 1;
     if (repeat > 5) repeat = 5;
@@ -856,69 +1187,102 @@ int cmd_measure(const std::vector<std::string> &args) {
         return 1;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    int channels = as_audio_channels(audio);
+    if (channels < 1) channels = 2;
+    if (channels > 8) channels = 8;
 
-    std::vector<float> frame;
-    int clip_count = 0;
-    capture_seconds(audio, seconds, channel, &frame, &clip_count);
-    AsStats st;
-    as_stats_compute(frame.data(), (int)frame.size(), as_audio_rate(audio), &st);
-
-    std::vector<double> vpps, freqs;
-    for (int r = 0; r < repeat; ++r) {
-        if (r > 0) {
-            frame.clear();
-            clip_count = 0;
-            capture_seconds(audio, seconds, channel, &frame, &clip_count);
-            as_stats_compute(frame.data(), (int)frame.size(), as_audio_rate(audio), &st);
+    std::vector<int> selected;
+    std::string spec = opt_value(args, "--channels", "");
+    if (spec == "all" || spec == "both") {
+        for (int c = 0; c < channels; ++c) selected.push_back(c);
+    } else if (!spec.empty()) {
+        size_t pos = 0;
+        while (pos <= spec.size()) {
+            size_t comma = spec.find(',', pos);
+            std::string part = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+            char *end = nullptr;
+            long c = std::strtol(part.c_str(), &end, 10);
+            if (end != part.c_str() && c >= 0 && c < channels)
+                selected.push_back((int)c);
+            if (comma == std::string::npos) break;
+            pos = comma + 1;
         }
-        double peak_dbfs = as_linear_to_db(st.peak);
-        double vrms = calibrated_vrms(have_cal ? &cal : nullptr, peak_dbfs);
-        double vpp = vrms > 0.0 ? 2.0 * crest_factor(st) * vrms : 0.0;
-        vpps.push_back(vpp);
-        freqs.push_back(st.freq);
-    }
-    double vpp_mean = 0.0, freq_mean = 0.0;
-    for (double x : vpps) vpp_mean += x;
-    for (double x : freqs) freq_mean += x;
-    vpp_mean /= (double)vpps.size();
-    freq_mean /= (double)freqs.size();
-    double vpp_var = 0.0, freq_var = 0.0;
-    for (size_t i = 0; i < vpps.size(); ++i) {
-        vpp_var += (vpps[i] - vpp_mean) * (vpps[i] - vpp_mean);
-        freq_var += (freqs[i] - freq_mean) * (freqs[i] - freq_mean);
-    }
-    if (vpps.size() > 1) {
-        vpp_var /= (double)(vpps.size() - 1);
-        freq_var /= (double)(freqs.size() - 1);
     } else {
-        vpp_var = freq_var = 0.0;
+        int c = opt_int(args, "--channel", 0);
+        if (c < 0 || c >= channels) c = 0;
+        selected.push_back(c);
+    }
+    if (selected.empty()) selected.push_back(0);
+    if (selected.size() > 8) selected.resize(8);
+
+    std::vector<AsStats> st0(selected.size());
+    std::vector<int> clip0(selected.size(), 0);
+    std::vector<std::vector<double>> vpps(selected.size());
+    std::vector<std::vector<double>> freqs(selected.size());
+    int frames = 0;
+    for (int r = 0; r < repeat; ++r) {
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        frames = capture_interleaved(audio, seconds, &interleaved, &clips);
+        for (size_t j = 0; j < selected.size(); ++j) {
+            std::vector<float> frame;
+            extract_channel(interleaved, channels, selected[j], &frame);
+            AsStats st;
+            as_stats_compute(frame.data(), (int)frame.size(), as_audio_rate(audio), &st);
+            if (r == 0) {
+                st0[j] = st;
+                clip0[j] = (selected[j] < (int)clips.size()) ? clips[(size_t)selected[j]] : 0;
+            }
+            double peak_dbfs = as_linear_to_db(st.peak);
+            double vrms = calibrated_vrms(have_cal ? &cal : nullptr, peak_dbfs);
+            double vpp = vrms > 0.0 ? 2.0 * crest_factor(st) * vrms : 0.0;
+            vpps[j].push_back(vpp);
+            freqs[j].push_back(st.freq);
+        }
     }
 
     AsReport rep;
     as_report_init(&rep, device.c_str(), as_input_mode_id(mode),
-                   as_audio_rate(audio), (int)frame.size(), seconds);
+                   as_audio_rate(audio), frames, seconds);
     rep.confidence = have_cal ? cal.confidence : AS_CONF_ASSUMED;
     rep.fs_volts_rms = have_cal ? cal.fs_volts_rms : 0.0;
     std::snprintf(rep.calibration_id, sizeof(rep.calibration_id), "%s",
                   have_cal ? cal.device_id : "none");
-    rep.channels = 1;
-    rep.ch[0].channel = channel;
-    std::snprintf(rep.ch[0].label, sizeof(rep.ch[0].label), "CH%d", channel + 1);
-    rep.ch[0].stats = st;
-    rep.ch[0].peak_dbfs = as_linear_to_db(st.peak);
-    rep.ch[0].rms_dbfs = as_linear_to_db(st.rms);
-    rep.ch[0].vrms = calibrated_vrms(have_cal ? &cal : nullptr, rep.ch[0].peak_dbfs);
-    rep.ch[0].vpp = rep.ch[0].vrms > 0.0 ? 2.0 * crest_factor(st) * rep.ch[0].vrms : 0.0;
-    rep.ch[0].clip_count = clip_count;
+    rep.channels = (int)selected.size();
+    for (size_t j = 0; j < selected.size(); ++j) {
+        const AsStats &st = st0[j];
+        AsChannelMeasurement &m = rep.ch[j];
+        m.channel = selected[j];
+        std::snprintf(m.label, sizeof(m.label), "CH%d", selected[j] + 1);
+        m.stats = st;
+        m.peak_dbfs = as_linear_to_db(st.peak);
+        m.rms_dbfs = as_linear_to_db(st.rms);
+        m.vrms = calibrated_vrms(have_cal ? &cal : nullptr, m.peak_dbfs);
+        m.vpp = m.vrms > 0.0 ? 2.0 * crest_factor(st) * m.vrms : 0.0;
+        m.clip_count = clip0[j];
+    }
     rep.repeat_count = repeat;
-    rep.vpp_std = std::sqrt(vpp_var);
-    rep.freq_std = std::sqrt(freq_var);
     rep.limits.max_vpp = opt_num(args, "--max-vpp", 0.0);
     rep.limits.min_rms = opt_num(args, "--min-rms", 0.0);
     rep.limits.max_clip_samples = opt_int(args, "--max-clip", 0);
     rep.limits.min_freq_hz = opt_num(args, "--min-freq", 20.0);
     rep.limits.max_freq_hz = opt_num(args, "--max-freq", 20000.0);
     as_report_evaluate(&rep);
+
+    if (!vpps.empty() && vpps[0].size() > 1) {
+        double mean = 0.0, fmean = 0.0;
+        for (double x : vpps[0]) mean += x;
+        for (double x : freqs[0]) fmean += x;
+        mean /= (double)vpps[0].size();
+        fmean /= (double)freqs[0].size();
+        double var = 0.0, fvar = 0.0;
+        for (size_t i = 0; i < vpps[0].size(); ++i) {
+            var += (vpps[0][i] - mean) * (vpps[0][i] - mean);
+            fvar += (freqs[0][i] - fmean) * (freqs[0][i] - fmean);
+        }
+        rep.vpp_std = std::sqrt(var / (double)(vpps[0].size() - 1));
+        rep.freq_std = std::sqrt(fvar / (double)(freqs[0].size() - 1));
+    }
 
     std::error_code ec;
     std::filesystem::create_directories(out_dir, ec);
@@ -939,13 +1303,17 @@ int cmd_measure(const std::vector<std::string> &args) {
 
     std::printf("measure: %s · %s · %s\n", as_input_mode_id(mode),
                 have_cal ? as_confidence_name(cal.confidence) : "assumed", rep.verdict_text);
-    std::printf("  peak %.1f dBFS   RMS %.1f dBFS   %.1f Hz   clip %d\n",
-                rep.ch[0].peak_dbfs, rep.ch[0].rms_dbfs, st.freq, clip_count);
-    if (rep.ch[0].vrms > 0.0)
-        std::printf("  Vpp %.4f V   Vrms %.4f V   repeat %d · Vpp σ %.4f\n",
-                    rep.ch[0].vpp, rep.ch[0].vrms, repeat, rep.vpp_std);
-    else
-        std::printf("  voltage unavailable: no calibration (dBFS only)\n");
+    for (int j = 0; j < rep.channels; ++j) {
+        const AsChannelMeasurement &m = rep.ch[j];
+        std::printf("  %s  peak %.1f dBFS  RMS %.1f dBFS  %.1f Hz  clip %d",
+                    m.label, m.peak_dbfs, m.rms_dbfs, m.stats.freq, m.clip_count);
+        if (m.vrms > 0.0) std::printf("  Vpp %.4f V  Vrms %.4f V", m.vpp, m.vrms);
+        std::printf("\n");
+    }
+    if (repeat > 1)
+        std::printf("  repeat %d · CH%d Vpp σ %.5f · freq σ %.2f Hz\n", repeat,
+                    selected[0] + 1, rep.vpp_std, rep.freq_std);
+    if (!have_cal) std::printf("  voltage unavailable: no calibration (dBFS only)\n");
     if (rc_json == AS_OK) std::printf("  JSON: %s\n", json.c_str());
     if (rc_html == AS_OK) std::printf("  HTML: %s\n", html.c_str());
 
@@ -954,7 +1322,6 @@ int cmd_measure(const std::vector<std::string> &args) {
     as_safety_destroy(guard);
     return rep.verdict == 2 ? 1 : 0;
 }
-
 } // namespace
 
 int run_alpha_cli(int argc, char **argv) {
@@ -983,6 +1350,9 @@ int run_alpha_cli(int argc, char **argv) {
     if (cmd == "safety") return cmd_safety();
     if (cmd == "monitor") return cmd_monitor(args);
     if (cmd == "check") return cmd_check(args);
+    if (cmd == "xy") return cmd_xy(args);
+    if (cmd == "drift") return cmd_drift(args);
+    if (cmd == "spectrogram") return cmd_spectrogram(args);
     if (cmd == "tone") return cmd_tone(args);
     if (cmd == "session") return cmd_session(args.size() > 2 ? args[2] : "build/session");
     if (cmd == "calibrate") return cmd_calibrate(args);

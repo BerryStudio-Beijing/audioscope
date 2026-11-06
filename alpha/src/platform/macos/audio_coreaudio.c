@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — macOS CoreAudio backend (2ch float32). */
+/* AudioScope by BerryStudio 0.3-alpha — macOS CoreAudio backend (up to 8ch float32). */
 #include "platform/audio_backend.h"
 #include "core/api.h"
 #include "core/ring.h"
@@ -13,6 +13,7 @@
 #include <string.h>
 
 #define AS_MAX_BLOCK 4096
+#define AS_MAX_CH 8
 #define AS_PI 3.14159265358979323846
 
 struct AsAudio {
@@ -23,6 +24,7 @@ struct AsAudio {
     int running;
     double fs;
     int block;
+    int channels;
     AsRing ring;
     _Atomic int tone_on;
     _Atomic uint64_t freq_bits;
@@ -87,6 +89,28 @@ static AudioDeviceID default_device(int input) {
     return dev;
 }
 
+static int device_input_channels(AudioDeviceID dev) {
+    AudioObjectPropertyAddress addr = {
+        kAudioDevicePropertyStreamConfiguration,
+        kAudioDevicePropertyScopeInput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(dev, &addr, 0, NULL, &size) != noErr ||
+        size == 0) {
+        return 0;
+    }
+    AudioBufferList *list = (AudioBufferList *)malloc(size);
+    if (!list) return 0;
+    int channels = 0;
+    if (AudioObjectGetPropertyData(dev, &addr, 0, NULL, &size, list) == noErr) {
+        for (UInt32 i = 0; i < list->mNumberBuffers; ++i)
+            channels += (int)list->mBuffers[i].mNumberChannels;
+    }
+    free(list);
+    return channels;
+}
+
 static int frames_from_buffer(const AudioBuffer *buf) {
     if (!buf || buf->mNumberChannels == 0) return 0;
     return (int)(buf->mDataByteSize / (sizeof(float) * buf->mNumberChannels));
@@ -105,21 +129,28 @@ static OSStatus input_proc(AudioDeviceID dev, const AudioTimeStamp *now,
     if (frames <= 0) return noErr;
     if (frames > AS_MAX_BLOCK) frames = AS_MAX_BLOCK;
 
-    float tmp[AS_MAX_BLOCK * 2];
+    float tmp[AS_MAX_BLOCK * AS_MAX_CH];
+    int ch = a->channels;
+    if (ch < 1) ch = 1;
+    if (ch > AS_MAX_CH) ch = AS_MAX_CH;
     if (in_data->mNumberBuffers == 1) {
         const float *src = (const float *)in_data->mBuffers[0].mData;
-        UInt32 ch = in_data->mBuffers[0].mNumberChannels;
+        UInt32 src_ch = in_data->mBuffers[0].mNumberChannels;
         if (!src) return noErr;
         for (int i = 0; i < frames; ++i) {
-            tmp[2 * i] = src[(size_t)i * ch];
-            tmp[2 * i + 1] = ch > 1 ? src[(size_t)i * ch + 1] : tmp[2 * i];
+            for (int c = 0; c < ch; ++c) {
+                UInt32 sc = (src_ch > 0 && (UInt32)c < src_ch) ? (UInt32)c : 0;
+                tmp[(size_t)i * ch + c] = src[(size_t)i * src_ch + sc];
+            }
         }
     } else {
-        const float *l = (const float *)in_data->mBuffers[0].mData;
-        const float *r = (const float *)in_data->mBuffers[1].mData;
         for (int i = 0; i < frames; ++i) {
-            tmp[2 * i] = l ? l[i] : 0.0f;
-            tmp[2 * i + 1] = r ? r[i] : tmp[2 * i];
+            for (int c = 0; c < ch; ++c) {
+                const float *src = (UInt32)c < in_data->mNumberBuffers
+                                       ? (const float *)in_data->mBuffers[c].mData
+                                       : (const float *)in_data->mBuffers[0].mData;
+                tmp[(size_t)i * ch + c] = src ? src[i] : 0.0f;
+            }
         }
     }
     as_ring_write(&a->ring, tmp, frames);
@@ -212,10 +243,14 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     a->out_dev = out_dev;
     a->fs = fs;
     a->block = block > 0 ? block : 128;
+    int in_ch = in_dev ? device_input_channels(in_dev) : 2;
+    if (in_ch < 1) in_ch = 1;
+    if (in_ch > AS_MAX_CH) in_ch = AS_MAX_CH;
+    a->channels = in_ch;
     atomic_init(&a->tone_on, 0);
     atomic_init(&a->freq_bits, double_bits(1000.0));
     atomic_init(&a->amp_bits, double_bits(0.1));
-    if (as_ring_init(&a->ring, (uint32_t)(fs * 4.0), 2) != 0) {
+    if (as_ring_init(&a->ring, (uint32_t)(fs * 4.0), (uint32_t)a->channels) != 0) {
         set_error("ring allocation failed");
         free(a);
         return NULL;
@@ -284,6 +319,10 @@ int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
     atomic_store_explicit(&a->amp_bits, double_bits(amp), memory_order_relaxed);
     atomic_store_explicit(&a->tone_on, on ? 1 : 0, memory_order_relaxed);
     return 0;
+}
+
+int as_audio_channels(const AsAudio *a) {
+    return a ? a->channels : 0;
 }
 
 double as_audio_rate(const AsAudio *a) {

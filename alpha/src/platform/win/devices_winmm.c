@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.2-alpha — Windows WinMM device enumeration.
+/* AudioScope by BerryStudio 0.3-alpha — Windows WinMM device enumeration.
  *
  * Alpha uses WinMM for a simple, dependency-free first Windows backend.
  * WASAPI/Direct2D are the v1.2 target; this file is intentionally small.
@@ -25,6 +25,8 @@ int as_platform_list_devices(AsDeviceInfo *out, int max) {
         d->is_input = 1;
         d->is_output = 0;
         d->channels = caps.wChannels;
+        d->in_channels = caps.wChannels;
+        d->out_channels = 0;
         d->sample_rate = 48000.0;
     }
     UINT outputs = waveOutGetNumDevs();
@@ -38,6 +40,8 @@ int as_platform_list_devices(AsDeviceInfo *out, int max) {
         d->is_input = 0;
         d->is_output = 1;
         d->channels = caps.wChannels;
+        d->in_channels = 0;
+        d->out_channels = caps.wChannels;
         d->sample_rate = 48000.0;
     }
     return n;

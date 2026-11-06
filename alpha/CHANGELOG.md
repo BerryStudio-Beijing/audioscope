@@ -1,5 +1,24 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.3.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Multi-channel capture: macOS CoreAudio backend now exposes up to 8 input channels; ring/report support 8 channels.
+- `measure --channels all|0,1` multi-channel measurement with per-channel stats, limits and report rows.
+- `xy` command: ASCII Lissajous + phase/gain/polarity readout; `--simulate` with phase/gain/drift.
+- `drift` command: 100 ppm simulation + estimation; live same-device capture explicitly reports that drift is not observable.
+- `spectrogram` command: time × log-frequency dB matrix, ASCII heatmap, peak row readout.
+- Core phase measurement (`as_phase_measure`) and drift estimation (`as_drift_estimate`).
+- Core spectrogram matrix (`AsSpectrogram`) with log-frequency rows.
+- Selftest expanded to 39 checks (phase/gain, 100 ppm drift, spectrogram, multi-channel report).
+
+### Changed
+
+- Version 0.3.0-alpha.1.
+- Report channel array expanded from 2 to 8.
+- `devices` shows input/output channel counts.
+
 ## 0.2.0-alpha.1 — 2026-11-07
 
 ### Added
