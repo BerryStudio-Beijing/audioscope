@@ -6,6 +6,12 @@
 macOS 原生的**声卡示波器 / 频谱仪 / 闭环测试仪**：纯 C + 系统框架实现，
 1 个 170 KB 二进制、零第三方依赖、启动 < 0.1 s。
 
+> **English** — AudioScope is a native macOS audio oscilloscope / spectrum analyzer /
+> loopback measurement tool written in plain C against system frameworks only:
+> one ~170 KB binary, no third-party libraries, sub-0.1 s startup. Build with `make`,
+> package with `make app`; prebuilt arm64 DMG on the
+> [Releases page](https://github.com/mmr0817/audioscope/releases/latest).
+
 ![AudioScope 主界面：波形 / 时域](docs/screenshots/0_scope.png)
 
 它由 Python + PyQt6 原型重写而来，1.1 在 1.0 基础上做了两件事：
@@ -28,6 +34,9 @@ macOS 原生的**声卡示波器 / 频谱仪 / 闭环测试仪**：纯 C + 系�
 ---
 
 ## 1. 编译与运行
+
+不想自己编译：从 [Releases](https://github.com/mmr0817/audioscope/releases/latest)
+下载 `AudioScope-1.1-macos-arm64.dmg`，拖进 Applications 即可。
 
 ```bash
 make            # 生成 build/AudioScope
