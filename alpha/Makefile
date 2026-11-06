@@ -11,8 +11,8 @@ MAC_CXX ?= clang++
 WIN_CC ?= x86_64-w64-mingw32-gcc
 WIN_CXX ?= x86_64-w64-mingw32-g++
 
-COMMON_CFLAGS := -std=c11 -O2 -Wall -Wextra -Isrc
-COMMON_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Isrc
+COMMON_CFLAGS := -std=c11 -O2 -Wall -Wextra -Isrc -MMD -MP
+COMMON_CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Isrc -MMD -MP
 MAC_CFLAGS := $(COMMON_CFLAGS) -mmacosx-version-min=12.0
 MAC_CXXFLAGS := $(COMMON_CXXFLAGS) -mmacosx-version-min=12.0
 WIN_CFLAGS := $(COMMON_CFLAGS) -D_WIN32_WINNT=0x0601
@@ -28,6 +28,7 @@ CORE_C := \
 	src/core/generator.c \
 	src/core/input_mode.c \
 	src/core/phase.c \
+	src/core/repair.c \
 	src/core/spectrogram.c \
 	src/core/safety.c \
 	src/core/calibration.c \
@@ -62,6 +63,8 @@ WIN_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C)) \
 MAC_LDFLAGS := -framework CoreAudio -framework AudioToolbox -framework AudioUnit \
                -framework CoreFoundation -lpthread -lm
 WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
+
+-include $(MAC_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
 
 .PHONY: all mac win test clean dist
 
@@ -112,8 +115,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.3.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.3.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-0.4.0-alpha.1-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-0.4.0-alpha.1-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

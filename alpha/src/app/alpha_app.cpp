@@ -4,6 +4,7 @@
 #include "core/fft.h"
 #include "core/generator.h"
 #include "core/phase.h"
+#include "core/repair.h"
 #include "core/report.h"
 #include "core/spectrogram.h"
 #include "core/stats.h"
@@ -20,6 +21,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <iterator>
 #include <string>
 #include <thread>
@@ -54,7 +56,7 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "%s %s — sound-card audio repair workstation (0.3-alpha)\n"
+        "%s %s — sound-card audio repair workstation (0.4-alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
@@ -65,6 +67,11 @@ void print_help() {
         "  audioscope-alpha xy [seconds] [--simulate --phase DEG --gain DB --drift PPM] [--ch1 N --ch2 N]\n"
         "  audioscope-alpha drift [seconds] [--simulate PPM] [--live]\n"
         "  audioscope-alpha spectrogram [seconds] [--synthetic] [--channel N]\n"
+        "  audioscope-alpha wow [seconds] [--synthetic --wow PCT --flutter PCT]\n"
+        "  audioscope-alpha crosstalk [seconds] [--synthetic]\n"
+        "  audioscope-alpha impedance --r R --vsrc V --vdut V | --simulate Z\n"
+        "  audioscope-alpha azimuth [seconds] [--synthetic --phase DEG]\n"
+        "  audioscope-alpha compare <before.json> <after.json>\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -419,6 +426,37 @@ int run_self_test() {
               std::fabs(pr.phase_deg - 45.0) < 2.0 &&
               std::fabs(pr.gain_db - 3.0) < 0.2,
           "phase/gain 45 deg +3 dB");
+
+    const int wn = 10 * kSampleRate;
+    std::vector<float> wow_sig(wn);
+    double wow_phase = 0.0;
+    for (int i = 0; i < wn; ++i) {
+        double t = (double)i / kSampleRate;
+        double f = 3000.0 * (1.0 + 0.003 * std::sin(2.0 * 3.14159265358979323846 * 0.5 * t)
+                                + 0.001 * std::sin(2.0 * 3.14159265358979323846 * 8.0 * t));
+        wow_phase += 2.0 * 3.14159265358979323846 * f / kSampleRate;
+        wow_sig[(size_t)i] = (float)(0.5 * std::sin(wow_phase));
+    }
+    AsWowResult wr;
+    check(as_wow_measure(wow_sig.data(), wn, kSampleRate, &wr) == 0 &&
+              wr.wow_pct > 0.15 && wr.wow_pct < 0.5 &&
+              wr.flutter_pct > 0.02 && wr.flutter_pct < 0.3,
+          "wow/flutter 0.3% + 0.1%");
+
+    std::vector<float> xt_a(4800), xt_b(4800);
+    for (int i = 0; i < 4800; ++i) {
+        double t = (double)i / kSampleRate;
+        xt_a[(size_t)i] = (float)(0.1 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t));
+        xt_b[(size_t)i] = xt_a[(size_t)i] * 0.001f;
+    }
+    double xt_db = 0.0;
+    check(as_crosstalk_db(xt_a.data(), xt_b.data(), 4800, &xt_db) == 0 &&
+              std::fabs(xt_db + 60.0) < 0.5,
+          "crosstalk -60 dB");
+
+    double z = 0.0;
+    check(as_impedance(1000.0, 0.5, 1.0, &z) == 0 && std::fabs(z - 1000.0) < 0.01,
+          "impedance 1000 ohm");
 
     const int dn = 5 * kSampleRate;
     std::vector<float> da(dn), db(dn);
@@ -975,7 +1013,7 @@ int cmd_session(const std::string &dir) {
         std::fprintf(stderr, "session create failed\n");
         return 1;
     }
-    as_session_event(s, "app_start", "{\"version\":\"0.3.0-alpha.1\"}");
+    as_session_event(s, "app_start", "{\"version\":\"0.4.0-alpha.1\"}");
     as_session_event(s, "input_mode", "{\"mode\":\"inst\"}");
     as_session_event(s, "note", "{\"text\":\"v0.2 session demo\"}");
     std::printf("session: %s (%d events)\n", as_session_path(s), as_session_count(s));
@@ -1322,6 +1360,229 @@ int cmd_measure(const std::vector<std::string> &args) {
     as_safety_destroy(guard);
     return rep.verdict == 2 ? 1 : 0;
 }
+int cmd_wow(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 10.0);
+    if (seconds < 3.0) seconds = 3.0;
+    if (seconds > 60.0) seconds = 60.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    double wow_pct = opt_num(args, "--wow", 0.3);
+    double flutter_pct = opt_num(args, "--flutter", 0.1);
+    double freq = opt_num(args, "--freq", 3000.0);
+    double fs = kSampleRate;
+    std::vector<float> x;
+    if (synthetic) {
+        int n = (int)(seconds * fs);
+        x.resize((size_t)n);
+        double phase = 0.0;
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            double f = freq * (1.0 + wow_pct / 100.0 * std::sin(2.0 * 3.14159265358979323846 * 0.5 * t)
+                                  + flutter_pct / 100.0 * std::sin(2.0 * 3.14159265358979323846 * 8.0 * t));
+            phase += 2.0 * 3.14159265358979323846 * f / fs;
+            x[(size_t)i] = (float)(0.5 * std::sin(phase));
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 1) channels = 1;
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &x);
+        as_audio_close(audio);
+    }
+    AsWowResult r;
+    if (as_wow_measure(x.data(), (int)x.size(), fs, &r) != 0) {
+        std::fprintf(stderr, "wow/flutter measurement failed (need a clean 3 kHz tone)\n");
+        return 1;
+    }
+    std::printf("%s %.2f s · %.1f Hz · %d periods\n",
+                synthetic ? "synthetic" : "live", seconds, r.freq_hz, r.periods);
+    std::printf("  wow %.3f %% RMS   flutter %.3f %% RMS   speed %.1f ppm\n",
+                r.wow_pct, r.flutter_pct, r.speed_ppm);
+    if (synthetic)
+        std::printf("  injected: wow %.3f %% peak, flutter %.3f %% peak (RMS ≈ peak/√2)\n",
+                    wow_pct, flutter_pct);
+    else
+        std::printf("  use a 3 kHz test tape / test tone; speed assumes 3000 Hz nominal.\n");
+    return 0;
+}
+
+int cmd_crosstalk(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 2.0);
+    if (seconds < 0.5) seconds = 0.5;
+    if (seconds > 30.0) seconds = 30.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    double fs = kSampleRate;
+    std::vector<float> a, b;
+    if (synthetic) {
+        int n = (int)(seconds * fs);
+        a.resize((size_t)n);
+        b.resize((size_t)n);
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            double s = 0.1 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t);
+            a[(size_t)i] = (float)s;
+            b[(size_t)i] = (float)(s * 0.001); /* -60 dB */
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 2) {
+            std::fprintf(stderr, "crosstalk needs 2 channels; device reports %d\n", channels);
+            as_audio_close(audio);
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &a);
+        extract_channel(interleaved, channels, 1, &b);
+        as_audio_close(audio);
+        std::printf("live: drive CH1 only; CH2 should be silent except leakage.\n");
+    }
+    double db = 0.0;
+    if (as_crosstalk_db(a.data(), b.data(), (int)std::min(a.size(), b.size()), &db) != 0) {
+        std::fprintf(stderr, "crosstalk measurement failed (CH1 is silent)\n");
+        return 1;
+    }
+    std::printf("crosstalk CH1 -> CH2: %.2f dB", db);
+    if (synthetic) std::printf(" (injected -60 dB)");
+    std::printf("\n");
+    return 0;
+}
+
+int cmd_impedance(const std::vector<std::string> &args) {
+    double r = opt_num(args, "--r", 1000.0);
+    double vsrc = opt_num(args, "--vsrc", 1.0);
+    double vdut = opt_num(args, "--vdut", -1.0);
+    double zsim = opt_num(args, "--simulate", -1.0);
+    if (zsim > 0.0) {
+        if (!(r > 0.0) || !(vsrc > 0.0)) {
+            std::fprintf(stderr, "need positive --r and --vsrc\n");
+            return 1;
+        }
+        vdut = vsrc * zsim / (r + zsim);
+    }
+    if (vdut < 0.0) {
+        std::fprintf(stderr, "usage: impedance --r R --vsrc V --vdut V | --simulate Z\n");
+        return 1;
+    }
+    double z = 0.0;
+    if (as_impedance(r, vdut, vsrc, &z) != 0) {
+        std::fprintf(stderr, "impedance invalid: need 0 <= Vdut < Vsource\n");
+        return 1;
+    }
+    std::printf("series R %.1f ohm · Vsource %.4f V · Vdut %.4f V\n", r, vsrc, vdut);
+    std::printf("  estimated Z %.2f ohm", z);
+    if (zsim > 0.0) std::printf(" (injected %.2f ohm)", zsim);
+    std::printf("\n");
+    return 0;
+}
+
+int cmd_azimuth(const std::vector<std::string> &args) {
+    double seconds = positional_num(args, 2.0);
+    if (seconds < 0.5) seconds = 0.5;
+    if (seconds > 30.0) seconds = 30.0;
+    bool synthetic = has_flag(args, "--synthetic");
+    double phase_in = opt_num(args, "--phase", 10.0);
+    double fs = kSampleRate;
+    std::vector<float> l, r;
+    if (synthetic) {
+        int n = (int)(seconds * fs);
+        l.resize((size_t)n);
+        r.resize((size_t)n);
+        double pr = phase_in * 3.14159265358979323846 / 180.0;
+        for (int i = 0; i < n; ++i) {
+            double t = (double)i / fs;
+            l[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 10000.0 * t));
+            r[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 10000.0 * t + pr));
+        }
+    } else {
+        AsAudio *audio = as_audio_open(-1, -2, kSampleRate, 128);
+        if (!audio) {
+            std::fprintf(stderr, "audio open failed: %s\n", as_audio_last_error());
+            return 1;
+        }
+        int channels = as_audio_channels(audio);
+        if (channels < 2) {
+            std::fprintf(stderr, "azimuth needs 2 channels; device reports %d\n", channels);
+            as_audio_close(audio);
+            return 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        std::vector<float> interleaved;
+        std::vector<int> clips;
+        capture_interleaved(audio, seconds, &interleaved, &clips);
+        fs = as_audio_rate(audio);
+        extract_channel(interleaved, channels, 0, &l);
+        extract_channel(interleaved, channels, 1, &r);
+        as_audio_close(audio);
+    }
+    AsPhaseResult pr;
+    if (as_phase_measure(l.data(), r.data(), (int)std::min(l.size(), r.size()), fs, &pr) != 0) {
+        std::fprintf(stderr, "azimuth measurement failed (need a 10 kHz test tone)\n");
+        return 1;
+    }
+    std::printf("azimuth L/R phase: %.2f deg at %.1f Hz\n", pr.phase_deg, pr.freq_hz);
+    std::printf("  adjust the head until phase is near 0 and L+R sum is maximum.\n");
+    if (synthetic) std::printf("  injected phase: %.2f deg\n", phase_in);
+    return 0;
+}
+
+int cmd_compare(const std::vector<std::string> &args) {
+    if (args.size() < 4) {
+        std::fprintf(stderr, "usage: compare <before.json> <after.json>\n");
+        return 1;
+    }
+    auto read_num = [](const std::string &path, const char *key, double *out) {
+        std::ifstream in(path);
+        if (!in) return false;
+        std::stringstream ss;
+        ss << in.rdbuf();
+        std::string text = ss.str();
+        std::string pat = std::string("\"") + key + "\"";
+        size_t p = text.find(pat);
+        if (p == std::string::npos) return false;
+        p = text.find(':', p + pat.size());
+        if (p == std::string::npos) return false;
+        char *end = nullptr;
+        double v = std::strtod(text.c_str() + p + 1, &end);
+        if (end == text.c_str() + p + 1) return false;
+        *out = v;
+        return true;
+    };
+    const char *keys[] = {"peak_dbfs", "rms_dbfs", "vpp", "freq_hz", "clip_count"};
+    double before[5] = {0}, after[5] = {0};
+    for (int i = 0; i < 5; ++i) {
+        if (!read_num(args[2], keys[i], &before[i]) ||
+            !read_num(args[3], keys[i], &after[i])) {
+            std::fprintf(stderr, "could not read %s from both reports\n", keys[i]);
+            return 1;
+        }
+    }
+    std::printf("compare %s -> %s\n", args[2].c_str(), args[3].c_str());
+    std::printf("  peak dBFS: %.2f -> %.2f (%+.2f)\n", before[0], after[0], after[0] - before[0]);
+    std::printf("  RMS dBFS : %.2f -> %.2f (%+.2f)\n", before[1], after[1], after[1] - before[1]);
+    std::printf("  Vpp      : %.4f -> %.4f (%+.4f)\n", before[2], after[2], after[2] - before[2]);
+    std::printf("  freq Hz  : %.1f -> %.1f (%+.1f)\n", before[3], after[3], after[3] - before[3]);
+    std::printf("  clip     : %.0f -> %.0f\n", before[4], after[4]);
+    return 0;
+}
+
+
 } // namespace
 
 int run_alpha_cli(int argc, char **argv) {
@@ -1353,6 +1614,11 @@ int run_alpha_cli(int argc, char **argv) {
     if (cmd == "xy") return cmd_xy(args);
     if (cmd == "drift") return cmd_drift(args);
     if (cmd == "spectrogram") return cmd_spectrogram(args);
+    if (cmd == "wow") return cmd_wow(args);
+    if (cmd == "crosstalk") return cmd_crosstalk(args);
+    if (cmd == "impedance") return cmd_impedance(args);
+    if (cmd == "azimuth") return cmd_azimuth(args);
+    if (cmd == "compare") return cmd_compare(args);
     if (cmd == "tone") return cmd_tone(args);
     if (cmd == "session") return cmd_session(args.size() > 2 ? args[2] : "build/session");
     if (cmd == "calibrate") return cmd_calibrate(args);

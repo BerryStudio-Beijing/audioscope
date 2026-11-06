@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.3-alpha — versioned calibration profiles. */
+/* AudioScope by BerryStudio 0.4-alpha — versioned calibration profiles. */
 #include "core/api.h"
 
 #include <math.h>

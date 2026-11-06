@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.3-alpha — time × frequency dB matrix. */
+/* AudioScope by BerryStudio 0.4-alpha — time × frequency dB matrix. */
 #ifndef AS_CORE_SPECTROGRAM_H
 #define AS_CORE_SPECTROGRAM_H
 

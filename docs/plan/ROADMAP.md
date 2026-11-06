@@ -1,4 +1,4 @@
-# AudioScope by BerryStudio 产品路线图 0.3-alpha → v2.0
+# AudioScope by BerryStudio 产品路线图 0.4-alpha → v2.0
 
 > **定位：声卡音频维修工作台**
 > 项目：AudioScope by BerryStudio
@@ -6,7 +6,7 @@
 > 目标平台：macOS 12+ arm64 + Windows 10/11 x64
 > 语言：C11 实时核心 + C++17 应用/平台层
 > 文档版本：1.2 · 2026-11-07 · 状态：Draft for build
-> 版本命名：**0.3-alpha** 是路线图 v1.3 “Multi-channel & Phase” 的核心子集；0.2-alpha 是 v1.2 核心，见 [`V0.2.md`](V0.2.md) / [`V0.3.md`](V0.3.md)。
+> 版本命名：**0.4-alpha** 是路线图 v1.4 “Repair Workflow” 的核心子集；0.2/0.3-alpha 见 [`V0.2.md`](V0.2.md) / [`V0.3.md`](V0.3.md) / [`V0.4.md`](V0.4.md)。
 > 配套文档：[`ALPHA-0.1.md`](ALPHA-0.1.md) · [`AGENTS.md`](AGENTS.md) · [`BACKLOG.md`](BACKLOG.md)
 
 ---
@@ -579,7 +579,7 @@
 4. 两台设备测漂移：显示 98 ppm，每 0.21 s 滑一个采样。
 5. 热力图显示 1 kHz 与谐波。
 
-### 5.5 v1.4 — Repair Workflow
+### 5.5 v1.4 — Repair Workflow（发布名 0.4-alpha）
 
 **目标**：在双端上让测量“能干活”。
 

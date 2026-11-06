@@ -1,5 +1,21 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.4.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Wow & flutter measurement from a 3 kHz tone/test tape; RMS wow/flutter % and speed ppm.
+- Crosstalk measurement CH1 -> CH2 in dB.
+- Series-resistor impedance measurement.
+- Azimuth measurement from 10 kHz L/R phase.
+- `compare` command for before/after report JSON deltas.
+- Selftest expanded to 42 checks (wow/flutter, crosstalk, impedance).
+
+### Changed
+
+- Version 0.4.0-alpha.1.
+- Repair workflow focused release; native GUI/WASAPI remain future work.
+
 ## 0.3.0-alpha.1 — 2026-11-07
 
 ### Added

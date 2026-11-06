@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.3-alpha — measurement report writer. */
+/* AudioScope by BerryStudio 0.4-alpha — measurement report writer. */
 #include "core/report.h"
 
 #include <math.h>

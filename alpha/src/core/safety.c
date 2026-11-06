@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.3-alpha — SafetyGuard state machine.
+/* AudioScope by BerryStudio 0.4-alpha — SafetyGuard state machine.
  *
  * The software can only gate, latch and warn. It cannot protect the sound card
  * from an over-voltage event; that is the job of the analog front end.
