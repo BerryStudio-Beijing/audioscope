@@ -1,13 +1,21 @@
 # AudioScope 1.1 — 声卡示波器 / 频谱仪 / 闭环测试仪（纯 C）
 
-`test_pcb`（Python + PyQt6 版）的 **C 重写版**，1.1 在 1.0 基础上做了两件事：
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64-lightgrey.svg)](#1-编译与运行)
+
+macOS 原生的**声卡示波器 / 频谱仪 / 闭环测试仪**：纯 C + 系统框架实现，
+1 个 170 KB 二进制、零第三方依赖、启动 < 0.1 s。
+
+![AudioScope 主界面：波形 / 时域](docs/screenshots/0_scope.png)
+
+它由 Python + PyQt6 原型重写而来，1.1 在 1.0 基础上做了两件事：
 
 1. **界面整体重绘**：按“精密仪器”视觉规范重做（暖灰石墨面板、单一鼠尾草绿重点色、
    三种排印角色、4px 网格、图表 32px 安全区、仅向下填充、去掉一切发光/霓虹/JUCE 味）。
 2. **新增本地闭环测试**：自写波形算法 + 自动校准 + 采集分析 + 报告导出，
    输出可比较、可复现的 JSON/CSV/WAV，并给出电路调整建议与下一轮测试参数。
 
-| | Python 版 (`../test_pcb`) | 本项目（C） |
+| | 原 Python 原型 | 本项目（C） |
 |---|---|---|
 | 运行时依赖 | Python 3.9 + venv（273 MB） | 无（只用系统框架） |
 | 可执行文件 | venv + 20+ 个包 | **1 个 170 KB 二进制**，`.app` 约 180 KB |
@@ -45,6 +53,12 @@ Windows 需要独立的 Win32 + Direct2D + WASAPI 平台层；仓库里的 `win/
 ---
 
 ## 2. 界面（1.1 设计语言）
+
+| 频谱 / FFT + 瀑布 | 闭环测试（幅频 / 相频） |
+|---|---|
+| ![频谱与瀑布](docs/screenshots/1_fft.png) | ![闭环测试](docs/screenshots/3_loop.png) |
+| **幅频 / 相频（Bode）** | **明色主题** |
+| ![Bode](docs/screenshots/2_bode.png) | ![明色主题](docs/screenshots/4_light.png) |
 
 规范落地的几条硬规则（都能在代码里找到对应实现）：
 
@@ -150,6 +164,10 @@ scripts/run_loopback.sh  可重复测试脚本（不需要硬件）
 | ← / → | 时基缩放 |
 | ⌘Q | 退出 |
 
+信号源窗口（⌘G）：内置正弦 / 方波 / 三角 / 扫频发生器，也能直接播放本地音频文件。
+
+<img src="docs/screenshots/5_source.png" width="340" alt="信号源窗口">
+
 ---
 
 ## 6. 架构
@@ -202,4 +220,22 @@ make test                          # --selftest + --unittest
 `xattr -dr com.apple.quarantine build/AudioScope.app`。
 
 **读数不准**：在左栏“满量程”里填输入口 0 dBFS 对应的峰值电压（万用表标定）。
+
+---
+
+## 9. 许可证与贡献
+
+本项目以 **Apache License 2.0** 开源：全文见 [LICENSE](LICENSE)，版权与归属声明见 [NOTICE](NOTICE)。
+
+- 可自由商用、修改、再分发（包括闭源产品），需保留版权、许可证与 NOTICE 声明；
+- 包含明确的专利授权条款，贡献者的专利授权不会因诉讼而随意撤回；
+- 软件按“现状”提供，不含任何明示或暗示的担保。
+
+欢迎提 Issue / PR。提交前请保持本项目的两个硬约束：
+
+1. **零第三方依赖**——只调用 macOS 系统框架（Cocoa / CoreAudio / CoreText 等）；
+2. **可复现**——`make test` 全绿，`./scripts/run_loopback.sh` 两遍报告逐字节一致。
+
+提交代码即表示同意以 Apache-2.0 授权你的贡献（无需额外签署 CLA）。
+
 

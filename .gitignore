@@ -3,5 +3,6 @@ build/
 *.o
 *.dmg
 *.png
+!docs/screenshots/*.png
 build/repro/
 dist/
