@@ -1,0 +1,41 @@
+name: alpha
+
+on:
+  push:
+    branches: [ main, alpha/0.1.0 ]
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S alpha -B alpha/build -DAUDIOSCOPE_PLATFORM=macos
+      - name: Build
+        run: cmake --build alpha/build --config Release
+      - name: Test
+        run: ctest --test-dir alpha/build --output-on-failure
+      - name: Package
+        run: ditto -c -k --keepParent alpha/build/audioscope-alpha alpha/build/audioscope-alpha-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audioscope-alpha-macos
+          path: alpha/build/audioscope-alpha-macos.zip
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S alpha -B alpha/build -DAUDIOSCOPE_PLATFORM=windows -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build alpha/build --config Release
+      - name: Test
+        run: ctest --test-dir alpha/build -C Release --output-on-failure
+      - name: Package
+        run: Compress-Archive -Path alpha/build/Release/audioscope-alpha.exe -DestinationPath alpha/build/audioscope-alpha-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audioscope-alpha-windows
+          path: alpha/build/audioscope-alpha-windows.zip

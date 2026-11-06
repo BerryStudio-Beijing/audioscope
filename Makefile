@@ -98,4 +98,14 @@ win-core:
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all app run dmg test shot clean
+# 0.1-alpha dual-platform baseline (self-contained in alpha/)
+alpha:
+	$(MAKE) -C alpha mac
+
+alpha-win:
+	$(MAKE) -C alpha win
+
+alpha-test:
+	$(MAKE) -C alpha test
+
+.PHONY: all app run dmg test shot clean alpha alpha-win alpha-test

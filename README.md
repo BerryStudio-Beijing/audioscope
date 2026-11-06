@@ -1,5 +1,12 @@
 # AudioScope 1.1 — 声卡示波器 / 频谱仪 / 闭环测试仪（纯 C）
 
+> **0.1-alpha（Dual Spike）已开始**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/ALPHA-0.1.md`](docs/plan/ALPHA-0.1.md)。
+> 原 v1.1 保留在 tag `v1.1.0-initial`；alpha 分支是双端重构基线。
+>
+> **0.1-alpha (Dual Spike)** lives in [`alpha/`](alpha/README.md). v1.1 is preserved
+> at tag `v1.1.0-initial`.
+
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64-lightgrey.svg)](#1-编译与运行)
 
