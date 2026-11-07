@@ -17,6 +17,32 @@ double crest_factor(const AsStats &st) {
     return st.peak > 1e-9 ? st.peak / std::max(st.rms, 1e-12) : 0.0;
 }
 
+/* Device names come from the OS and are attacker-controlled in principle. */
+std::string json_string(const char *s) {
+    std::string out = "\"";
+    if (s) {
+        for (const unsigned char *p = (const unsigned char *)s; *p; ++p) {
+            switch (*p) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (*p < 0x20) {
+                    char b[8];
+                    std::snprintf(b, sizeof(b), "\\u%04x", *p);
+                    out += b;
+                } else {
+                    out += (char)*p;
+                }
+            }
+        }
+    }
+    out += "\"";
+    return out;
+}
+
 } // namespace
 
 void ui_spectrum_from_mag(const double *mag, int n, double fs,
@@ -44,10 +70,11 @@ std::string ui_snapshot_json(const UiSnapshotData &d) {
     std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M", std::localtime(&now));
 
     js << "window.AUDIOSCOPE_DATA = {\n";
-    js << "  meta: {version:\"" << as_version_string() << "\", platform:\"" << d.platform
-       << "\", mode:\"" << d.mode << "\", device:\"" << d.device << "\", rate:"
-       << std::fixed << std::setprecision(0) << d.fs << ", channels:" << d.channels
-       << ", source:\"" << d.source << "\", timestamp:\"" << stamp << "\"},\n";
+    js << "  meta: {version:" << json_string(as_version_string()) << ", platform:"
+       << json_string(d.platform) << ", mode:" << json_string(d.mode) << ", device:"
+       << json_string(d.device) << ", rate:" << std::fixed << std::setprecision(0) << d.fs
+       << ", channels:" << d.channels << ", source:" << json_string(d.source)
+       << ", timestamp:" << json_string(stamp) << "},\n";
 
     js << "  scope: {waveform:[";
     js << std::fixed << std::setprecision(5);

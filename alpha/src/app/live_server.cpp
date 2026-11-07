@@ -277,9 +277,10 @@ public:
         AsDeviceInfo devs[64];
         int n = as_platform_list_devices(devs, 64);
         for (int i = 0; i < n; ++i) {
-            if ((opt.device < 0 && devs[i].is_input) || opt.device == i) {
+            if (!devs[i].is_input) continue;
+            if (opt.device < 0 || opt.device == i) {
                 device_ = devs[i].name;
-                if (opt.device < 0 && devs[i].is_input) break;
+                break;
             }
         }
         source_ = "live · capture";
@@ -340,8 +341,8 @@ private:
     void append_history(const std::vector<float> &mono) {
         size_t n = std::min(mono.size(), (size_t)kScopeSamples);
         if (n < scope_.size()) {
-            std::memmove(scope_.data(), scope_.data() + (scope_.size() - n),
-                         n * sizeof(float));
+            std::memmove(scope_.data(), scope_.data() + n,
+                         (scope_.size() - n) * sizeof(float));
         }
         std::memcpy(scope_.data() + (scope_.size() - n), mono.data() + (mono.size() - n),
                     n * sizeof(float));
@@ -497,7 +498,7 @@ struct LiveServer::Impl {
 
         if (path == "/" || path.empty()) path = "/index.html";
         if (path.find("..") != std::string::npos || path.find('\\') != std::string::npos ||
-            path[0] != '/') {
+            path.find(':') != std::string::npos || path[0] != '/') {
             std::string resp = http_response(400, "Bad Request", "text/plain", "bad path\n");
             send_all(client, resp.data(), resp.size());
             close_socket(client);
