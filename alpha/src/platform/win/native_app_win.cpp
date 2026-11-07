@@ -362,7 +362,7 @@ void add_hit(int id, const Rect &r) {
 
 void fill_rect(gd::Graphics &g, float x, float y, float w, float h, Argb c) {
     if (w <= 0.0f || h <= 0.0f) return;
-    gd::SolidBrush b(gd::Color(c));
+    gd::SolidBrush b{static_cast<gd::Color>(c)};
     g.FillRectangle(&b, x, y, w, h);
 }
 
@@ -386,7 +386,7 @@ void fill_round(gd::Graphics &g, const Rect &r, float radius, Argb c) {
     if (r.w <= 0.0f || r.h <= 0.0f) return;
     gd::GraphicsPath p;
     add_round_rect(p, r, radius);
-    gd::SolidBrush b(gd::Color(c));
+    gd::SolidBrush b{static_cast<gd::Color>(c)};
     g.FillPath(&b, &p);
 }
 
@@ -406,7 +406,7 @@ void line(gd::Graphics &g, float x1, float y1, float x2, float y2, Argb c,
 }
 
 void dot(gd::Graphics &g, float cx, float cy, float radius, Argb c) {
-    gd::SolidBrush b(gd::Color(c));
+    gd::SolidBrush b{static_cast<gd::Color>(c)};
     g.FillEllipse(&b, cx - radius, cy - radius, radius * 2.0f,
                   radius * 2.0f);
 }
@@ -426,7 +426,7 @@ float text_width(gd::Graphics &g, FontKind kind, const std::wstring &value) {
 void text(gd::Graphics &g, float x, float y, FontKind kind, Argb c,
           const std::wstring &value) {
     if (value.empty()) return;
-    gd::SolidBrush b(gd::Color(c));
+    gd::SolidBrush b{static_cast<gd::Color>(c)};
     g.DrawString(value.c_str(), static_cast<INT>(value.size()), font_at(kind),
                  gd::PointF(x, y), &b);
 }
@@ -434,7 +434,7 @@ void text(gd::Graphics &g, float x, float y, FontKind kind, Argb c,
 void text_rect(gd::Graphics &g, const Rect &r, FontKind kind, Argb c,
                const std::wstring &value, TextAlign align) {
     if (value.empty() || r.w <= 0.0f || r.h <= 0.0f) return;
-    gd::SolidBrush b(gd::Color(c));
+    gd::SolidBrush b{static_cast<gd::Color>(c)};
     gd::StringFormat *format = align == TEXT_RIGHT
                                    ? g_format_right
                                    : (align == TEXT_CENTER ? g_format_center
@@ -719,11 +719,11 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
     text(g, rx, r.y + 14.0f, FONT_SMALL, g_pal.text_faint,
          L"INPUT PEAK · CH1");
     text(g, rx, r.y + 30.0f, FONT_CRIT, g_pal.accent,
-         fmt(audioscope::as_linear_to_db(m.stats.peak), 1) + L" dBFS");
+         fmt(as_linear_to_db(m.stats.peak), 1) + L" dBFS");
 
     float yy = r.y + 78.0f;
     label_value(g, rx, yy, rw, L"RMS",
-                fmt(audioscope::as_linear_to_db(m.stats.rms), 1) + L" dBFS",
+                fmt(as_linear_to_db(m.stats.rms), 1) + L" dBFS",
                 g_pal.text);
     label_value(g, rx, yy + 26.0f, rw, L"FREQUENCY",
                 fmt(m.stats.freq, 1) + L" Hz", g_pal.text);
@@ -865,7 +865,7 @@ void draw_xy(gd::Graphics &g, NativeModel &m) {
 
     if (m.xy_x.size() == m.xy_y.size()) {
         g.SetClip(gd::RectF(p.x, p.y, p.w, p.h), gd::CombineModeReplace);
-        gd::SolidBrush b(gd::Color(with_alpha(g_pal.accent, 0.45f)));
+        gd::SolidBrush b{static_cast<gd::Color>(with_alpha(g_pal.accent, 0.45f))};
         for (size_t i = 0; i < m.xy_x.size(); ++i) {
             const float tx = p.x + p.w * 0.5f +
                              static_cast<float>(m.xy_x[i]) * p.w * 0.45f;
@@ -1348,7 +1348,7 @@ void ensure_backbuffer(int width, int height) {
         g_backbuffer_h == height)
         return;
     delete g_backbuffer;
-    g_backbuffer = new gd::Bitmap(width, height, gd::PixelFormat32bppPARGB);
+    g_backbuffer = new gd::Bitmap(width, height, PixelFormat32bppPARGB);
     if (g_backbuffer->GetLastStatus() != gd::Ok) {
         delete g_backbuffer;
         g_backbuffer = nullptr;
