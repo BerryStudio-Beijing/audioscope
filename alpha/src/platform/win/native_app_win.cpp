@@ -1278,7 +1278,7 @@ void draw_repair(gd::Graphics &g, NativeModel &m) {
          L"writes PDF + JSON + HTML");
     text(g, rx, r.y + 158.0f, FONT_SMALL, g_pal.warn,
          L"synthetic fixtures — not a DUT result");
-    text(g, rx, r.y + 182.0f, FONT_SMALL,
+    text(g, rx, r.y + 182.0f, FONT_SMALL, g_pal.text_faint,
          m.plan_ran ? L"advisory thresholds" : L"no run");
 }
 
