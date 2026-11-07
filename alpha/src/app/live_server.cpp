@@ -1,4 +1,7 @@
 /* AudioScope by BerryStudio 0.8-alpha — local live bridge. */
+#if defined(_WIN32) && !defined(NOMINMAX)
+#define NOMINMAX 1
+#endif
 #include "app/live_server.hpp"
 
 #include "app/ui_snapshot.hpp"
@@ -339,7 +342,7 @@ private:
     }
 
     void append_history(const std::vector<float> &mono) {
-        size_t n = std::min(mono.size(), (size_t)kScopeSamples);
+        size_t n = (std::min)(mono.size(), (size_t)kScopeSamples);
         if (n < scope_.size()) {
             std::memmove(scope_.data(), scope_.data() + n,
                          (scope_.size() - n) * sizeof(float));
@@ -347,7 +350,7 @@ private:
         std::memcpy(scope_.data() + (scope_.size() - n), mono.data() + (mono.size() - n),
                     n * sizeof(float));
 
-        size_t m = std::min(mono.size(), hist_.size());
+        size_t m = (std::min)(mono.size(), hist_.size());
         std::memmove(hist_.data(), hist_.data() + m, (hist_.size() - m) * sizeof(float));
         std::memcpy(hist_.data() + (hist_.size() - m), mono.data() + (mono.size() - m),
                     m * sizeof(float));
