@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — macOS CoreAudio device enumeration. */
+/* AudioScope by BerryStudio 0.7-alpha — macOS CoreAudio device enumeration. */
 #include "core/api.h"
 
 #include <CoreAudio/CoreAudio.h>

@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — lock-free single-producer/single-consumer ring.
+/* AudioScope by BerryStudio 0.7-alpha — lock-free single-producer/single-consumer ring.
  *
  * The audio callback writes interleaved stereo float frames; the UI reads the
  * most recent frames without advancing a consumer cursor (snapshot semantics).

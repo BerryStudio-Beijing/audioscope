@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — minimal single-page PDF writer. */
+/* AudioScope by BerryStudio 0.7-alpha — minimal single-page PDF writer. */
 #ifndef AS_CORE_PDF_H
 #define AS_CORE_PDF_H
 

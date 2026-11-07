@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — phase, gain and drift measurement. */
+/* AudioScope by BerryStudio 0.7-alpha — phase, gain and drift measurement. */
 #ifndef AS_CORE_PHASE_H
 #define AS_CORE_PHASE_H
 

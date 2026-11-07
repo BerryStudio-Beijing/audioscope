@@ -1,5 +1,23 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.7.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Precision Instrument Web UI redesigned against the BerryStudio UI / MasterLens 3.0
+  visual reference: 1120×700 canvas, Geist, dark/light tokens, three materials,
+  4 px grid, seven pages.
+- `audioscope-alpha ui` command: copies the web UI and injects a C++-generated
+  snapshot (waveform, spectrum, THD, XY, channels, repair plan, calibration).
+- UI screenshot script and reference screenshots.
+- UI smoke test in `make test` / CTest.
+
+### Changed
+
+- Version 0.7.0-alpha.1.
+- CLI/TUI remains for measurement; Web UI is the new visual front end (local,
+  read-only snapshot, no network).
+
 ## 0.6.0-alpha.1 — 2026-11-07
 
 ### Added

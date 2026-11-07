@@ -1,0 +1,171 @@
+/* ============================================================================
+   BerryStudio UI — semantic tokens
+   Extracted from MasterLens 3.0.0 (Source/ui/Theme.h, Theme.cpp, Layout.h)
+   and FRONTEND-DESIGN.md. Components must only consume these variables.
+   ========================================================================== */
+
+@font-face {
+  font-family: "Geist";
+  src: url("../assets/fonts/Geist-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../assets/fonts/Geist-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../assets/fonts/Geist-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../assets/fonts/GeistMono-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  --font-sans: "Geist", "PingFang SC", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+  --font-mono: "Geist Mono", "SFMono-Regular", "PingFang SC", monospace;
+
+  /* Semantic type roles — do not invent per-component sizes. */
+  /* JUCE height 14/16/26 maps to these CSS em sizes at the 1120×700 base.
+     The 3.0.0 render proves the mapping: 14/1.25≈11.5, 16/1.2≈13.5. */
+  --type-label: 10.7px;    /* labels, table keys, axis units, body copy */
+  --type-value: 13px;    /* readings, editable values, buttons */
+  --type-critical: 23px;   /* LUFS / dBTP only — max two per screen */
+
+  /* 4 px base grid */
+  --gap-1: 4px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-6: 24px;
+  --gap-8: 32px;
+
+  --radius-card: 6px;
+  --radius-control: 5px;
+
+  --header-h: 64px;
+  --rail-h: 48px;
+  --param-h: 96px;
+  --footer-h: 32px;
+  --readout-w: 208px;
+  --row-h: 32px;
+  --control-h: 28px;
+}
+
+/* ---------------------------------------------------------------------------
+   Dark (default): warm graphite, never pure black; text is warm grey-green.
+   ------------------------------------------------------------------------- */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #171a1b;
+  --card: #202425;
+  --card-alt: #2a2f30;
+  --raised: #2a2f30;
+  --line: #3b4242;
+  --border: #3b4242;
+  --line-soft: #303637;
+  --divider: #303637;
+
+  --text: #969c98;
+  --text-dim: #909994;
+  --text-faint: #858f89;
+
+  --accent: #819e90;
+  --accent-soft: #30463e;
+  --cyan: #80989f;
+  --good: #819e90;
+  --info: #819e90;
+  --warn: #b19870;
+  --bad: #c08278;
+  --violet: #94949c;
+
+  /* UI-specific derived values */
+  --top-glint: rgba(255, 255, 255, 0.13);
+  --top-glint-soft: rgba(255, 255, 255, 0.085);
+  --hover-wash: rgba(255, 255, 255, 0.08);
+  --contact-1: rgba(0, 0, 0, 0.20);
+  --contact-2: rgba(0, 0, 0, 0.10);
+  --scrim: rgba(0, 0, 0, 0.55);
+
+  /* Charts: in dark mode the card itself is the measurement surface. */
+  --plot-bg: #202425;
+  --plot-grid: #303637;
+  --plot-grid-strong: #3b4242;
+  --plot-axis: #858f89;
+  --plot-curve: #819e90;
+  --spec-curve: rgba(232, 234, 232, 0.92);
+  --plot-curve-soft: rgba(129, 158, 144, 0.35);
+  --plot-fill-top: rgba(129, 158, 144, 0.16);
+  --plot-fill-bottom: rgba(129, 158, 144, 0);
+  --plot-label: #969c98;
+
+  --shadow-window: 0 0 0 1px rgba(255, 255, 255, 0.03), 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+/* ---------------------------------------------------------------------------
+   Light: warm grey-green paper. Not an inversion of dark.
+   Charts keep a dark graphite "measurement window".
+   ------------------------------------------------------------------------- */
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #e5e6df;
+  --card: #dce0d9;
+  --card-alt: #e9ece5;
+  --raised: #dce0d9;
+  --line: #c4cdc5;
+  --border: #c4cdc5;
+  --line-soft: #d0d7cf;
+  --divider: #d0d7cf;
+
+  --text: #26352e;
+  --text-dim: #53665b;
+  --text-faint: #62776a;
+
+  --accent: #356d56;
+  --accent-soft: #d6e5d9;
+  --cyan: #426b7a;
+  --good: #14835a;
+  --info: #356d56;
+  --warn: #b46a10;
+  --bad: #c9302a;
+  --violet: #5f4fe0;
+
+  --good-ink: #0d6b47;
+  --warn-ink: #8a4f00;
+  --bad-ink: #b3261e;
+  --cyan-ink: #355b68;
+
+  --top-glint: rgba(255, 255, 255, 0.70);
+  --top-glint-soft: rgba(255, 255, 255, 0.65);
+  --hover-wash: rgba(255, 255, 255, 0.35);
+  --contact-1: rgba(0, 0, 0, 0.07);
+  --contact-2: rgba(0, 0, 0, 0.04);
+  --scrim: rgba(0, 0, 0, 0.28);
+
+  --plot-bg: #283133;
+  --plot-grid: #455153;
+  --plot-grid-strong: #566264;
+  --plot-axis: #a7b3ae;
+  --plot-curve: rgba(230, 232, 230, 0.92);
+  --spec-curve: rgba(232, 234, 232, 0.92);
+  --plot-curve-soft: rgba(230, 232, 230, 0.35);
+  --plot-fill-top: rgba(129, 158, 144, 0.10);
+  --plot-fill-bottom: rgba(129, 158, 144, 0);
+  --plot-label: #b2bcb8;
+
+  --shadow-window: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 24px 80px rgba(0, 0, 0, 0.18);
+}

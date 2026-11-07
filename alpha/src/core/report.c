@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — measurement report writer. */
+/* AudioScope by BerryStudio 0.7-alpha — measurement report writer. */
 #include "core/report.h"
 #include "core/pdf.h"
 
@@ -393,7 +393,7 @@ int as_report_write_pdf(const AsReport *r, const char *path) {
                 "Software cannot protect the sound card. Use a protected front end for high voltage.");
     as_pdf_text(p, 50, y - 14, 8,
                 "Canonical report: self-contained HTML. This PDF is a printable summary.");
-    as_pdf_text(p, 50, 60, 8, "AudioScope by BerryStudio 0.6-alpha");
+    as_pdf_text(p, 50, 60, 8, "AudioScope by BerryStudio 0.7-alpha");
     int rc = as_pdf_finish(p, path);
     as_pdf_destroy(p);
     return rc == 0 ? AS_OK : AS_ERR_IO;

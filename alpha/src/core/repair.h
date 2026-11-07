@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — repair-specific measurements. */
+/* AudioScope by BerryStudio 0.7-alpha — repair-specific measurements. */
 #ifndef AS_CORE_REPAIR_H
 #define AS_CORE_REPAIR_H
 

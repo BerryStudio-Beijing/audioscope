@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — analysis windows. */
+/* AudioScope by BerryStudio 0.7-alpha — analysis windows. */
 #ifndef AS_CORE_WINDOW_H
 #define AS_CORE_WINDOW_H
 

@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — tiny platform-neutral character canvas.
+/* AudioScope by BerryStudio 0.7-alpha — tiny platform-neutral character canvas.
  *
  * The alpha uses this to prove the shared UI layer without committing to a
  * native windowing toolkit yet. A Direct2D/CoreGraphics Canvas can implement

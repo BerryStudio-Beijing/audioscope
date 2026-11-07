@@ -1,46 +1,59 @@
-# AudioScope by BerryStudio — 0.6-alpha (Repair Plans & PDF)
+# AudioScope by BerryStudio — 0.7-alpha (Precision Instrument UI)
 
-> **AudioScope by BerryStudio** · `0.6.0-alpha.1` · macOS + Windows · C11 core + C++17 app · no third-party runtime deps
-> 0.5-alpha 保留在 tag `v0.5.0-alpha.1`；0.4-alpha 保留在 tag `v0.4.0-alpha.1`。
+> **AudioScope by BerryStudio** · `0.7.0-alpha.1` · macOS + Windows · C11 core + C++17 app + local Web UI
+> 0.6-alpha 保留在 tag `v0.6.0-alpha.1`；0.5-alpha 保留在 tag `v0.5.0-alpha.1`。
 
-## 0.6-alpha 是什么
+## 0.7-alpha 是什么
 
-在 0.5-alpha 的失真测量之上，补齐 **维修计划、PDF 报告、THD vs 频率**：
+按同工作区的 **BerryStudio UI / MasterLens 3.0 复刻设计标准** 重做前端视觉：
 
-- **维修模板**：`templates` 列出 quick / pedal / tape / mixer / headphone；`repair` 运行合成验证计划。
-- **PDF 报告**：`measure` 与 `repair` 生成可打印 PDF；HTML 仍是 canonical 报告。
-- **THD vs 频率**：`freqsweep` 对数频率扫描，输出表格与 CSV。
-- 保留 THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、SafetyGuard、校准。
+- **Precision Instrument**：暖灰石墨面板、单一鼠尾草绿 accent、琥珀/陶土红仅表达语义。
+- **1120×700** 逻辑画布、4 px 网格、Geist 字体、暗/明双主题。
+- **三种材质**：Flat 数据、Raised 面板、Recessed 图表/输入。
+- **七个页面**：波形、频谱、相位、测量、维修、报告、校准。
+- **本地 Web UI**：`audioscope-alpha ui` 把 C++ 核心生成的快照注入页面，不依赖网络/云。
 
-## 当前命令
+![主界面](web/docs/screens/main.png)
 
-| 命令 | 说明 |
-|---|---|
-| `templates` | 列出内置维修计划 |
-| `repair --template tape` | 运行合成维修计划；输出 JSON + PDF |
-| `freqsweep` | THD vs 频率；`--start 20 --end 20000 --points 12 --csv freq.csv` |
-| `thd` / `imd` / `sweep` | 失真测量与 THD vs 电平 |
-| `measure --channels all` | 多通道测量；JSON + HTML + PDF |
-| `wow` / `crosstalk` / `impedance` / `azimuth` | 维修测量 |
-| `compare` | 前后报告 JSON 差值 |
-| `xy` / `drift` / `spectrogram` | 相位/漂移/热力图 |
-| `calibrate` / `modes` / `safety` / `check` | 校准、输入模式、安全、信号检查 |
-| `selftest` | 47 项核心自检 |
+![明色主题](web/docs/screens/light.png)
 
-### 示例
+## 启动 UI
 
 ```bash
-# 列出并运行维修计划
-./build/audioscope-alpha templates
-./build/audioscope-alpha repair --template tape --out repairs
+cd alpha
 
-# THD vs 频率
-./build/audioscope-alpha freqsweep --start 20 --end 20000 --points 12 --csv freq.csv
+# 1) 只预览设计（内置合成快照）
+python3 -m http.server 8124 --bind 127.0.0.1 --directory web
+# 打开 http://127.0.0.1:8124/
 
-# 测量 + 三份报告
-./build/audioscope-alpha measure 2 --mode inst --channels all --out reports
-# reports/run-*.json / .html / .pdf
+# 2) 注入 C++ 核心生成的快照
+./build/audioscope-alpha ui --out build/ui
+python3 -m http.server 8125 --bind 127.0.0.1 --directory build/ui
+# 打开 http://127.0.0.1:8125/
 ```
+
+`ui` 会复制 `web/`，并把 `<!--DATA-->` 替换为 `window.AUDIOSCOPE_DATA`，包含波形、频谱、THD、XY、通道、维修计划和校准快照。
+
+## UI 页面
+
+| 页面 | 内容 |
+|---|---|
+| 波形 | Peak / RMS / 频率 / 波峰因数 / Vpp / clip，主波形 + 触发线 |
+| 频谱 | THD / THD+N / SNR / SINAD / SFDR / ENOB，对数频谱 + 谐波标记 |
+| 相位 | 相位 / 增益 / 极性，XY 密度图 + 拟合椭圆 |
+| 测量 | 8 通道表、限值、判定、未校准电压警告 |
+| 维修 | tape 计划步骤、阈值、PASS/FAIL、PDF/JSON |
+| 报告 | JSON/HTML/PDF 最近报告 |
+| 校准 | profile 字段、置信度、电压不可用提示 |
+
+## 设计基线
+
+- 颜色/材质/排印取 `berrystudio-ui/design-system/berry-tokens.css`，不散落十六进制。
+- 字体：Geist Regular/Medium/Bold + Geist Mono（SIL OFL 1.1，见 `web/NOTICE.md`）。
+- 数字 tabular；负号 U+2212、范围 U+2013、缺失 U+2014。
+- 图表在明色主题下保持深石墨测量面。
+- 快捷键：`1–7` 切页、`Esc` 关闭弹窗、`⌘/Ctrl+E` 导出快照。
+- 主题/弹窗支持深链接：`?theme=light#scope`、`#about`、`#settings`。
 
 ## 构建与测试
 
@@ -48,36 +61,26 @@
 cd alpha
 make mac
 make win
-make test     # 47 项 selftest + ringtest
+make test     # 47 项 selftest + ringtest + ui smoke
 ```
 
-macOS 12+ / Xcode CLT；Windows 交叉编译需要 mingw-w64。
+UI 截图（需要 Chrome）：
 
-## 报告
+```bash
+./web/scripts/shoot.sh
+# -> web/docs/screens/*.png (1120×700 @ 2×)
+```
 
-- JSON：机器可读，schema v2。
-- HTML：自包含、离线可开，canonical。
-- PDF：单页可打印摘要，Helvetica 文本；验证过 `file`/`qlmanage` 可渲染。
-- 维修计划：`repair-<template>.json` + `.pdf`。
+## 0.7-alpha 的限制
 
-## 测试覆盖
-
-- 单位、输入模式、SafetyGuard、clip feed、量程建议
-- 校准、JSON/HTML/PDF 报告、判定
-- FFT、相位/增益、漂移、频谱矩阵
-- wow/flutter、串扰、阻抗、THD、IMD、THD 扫描
-- 维修模板、PDF 头/文件、ASCII canvas、ring buffer
-
-## 0.6-alpha 的限制
-
-- **没有原生 GUI**：仍是 ASCII TUI。
+- **Web UI 是本地只读快照**：不是实时 WebSocket 音频流；实时交互仍走 CLI。
+- **没有原生 GUI**：CoreGraphics/Direct2D 未实现；Web UI 是当前前端。
 - **Windows 仍是 WinMM 2ch**：WASAPI 未实现。
-- **维修计划目前只跑合成验证**：`repair --live` 明确未接线；真实 DUT 闭环待后续。
-- **PDF 是单页摘要**：无图表/多页/曲线叠加。
-- **THD vs 频率用合成信号**：真实闭环扫频未做。
+- **维修计划仍只跑合成验证**：真实 DUT 闭环未接线。
+- **PDF 单页摘要**：无多页/图表/曲线叠加。
 - **没有硬件前端**：软件不能保护声卡。
 
 ## 后续
 
-- 0.7-alpha：原生 Canvas + WASAPI + 真实 DUT 闭环 + 多页 PDF/曲线。
+- 0.8-alpha：原生 Canvas / WASAPI / 实时 WebSocket 桥 / 真实 DUT 闭环。
 - 路线图见 [`../docs/plan/ROADMAP.md`](../docs/plan/ROADMAP.md)。

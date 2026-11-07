@@ -68,7 +68,7 @@ WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
 
 -include $(MAC_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
 
-.PHONY: all mac win test clean dist
+.PHONY: all mac win ui test clean dist
 
 all: mac
 
@@ -104,11 +104,18 @@ $(BUILD)/audioscope-alpha.exe: $(WIN_OBJS)
 	@mkdir -p $(BUILD)
 	$(WIN_CXX) $(WIN_OBJS) -o $@ $(WIN_LDFLAGS)
 
+ui: mac
+	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui
+
 test: mac $(BUILD)/audioscope-alpha-ringtest
 	./$(BUILD)/audioscope-alpha selftest
 	./$(BUILD)/audioscope-alpha scope > /dev/null
 	./$(BUILD)/audioscope-alpha fft > /dev/null
 	./$(BUILD)/audioscope-alpha-ringtest
+	rm -rf $(BUILD)/ui-test
+	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui-test > /dev/null
+	test -f $(BUILD)/ui-test/index.html
+	grep -q AUDIOSCOPE_DATA $(BUILD)/ui-test/index.html
 
 dist: mac win
 	rm -rf dist
@@ -117,8 +124,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.6.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.6.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-0.7.0-alpha.1-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-0.7.0-alpha.1-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

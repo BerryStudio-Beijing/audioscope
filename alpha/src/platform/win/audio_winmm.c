@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — Windows WinMM backend (2ch int16, 48 kHz).
+/* AudioScope by BerryStudio 0.7-alpha — Windows WinMM backend (2ch int16, 48 kHz).
  *
  * This is the alpha fallback. It is deliberately simple: 4 queued buffers,
  * int16 PCM, WAVE_MAPPER by default. WASAPI is the v1.2 target.

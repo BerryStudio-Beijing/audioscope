@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — device enumeration stub. */
+/* AudioScope by BerryStudio 0.7-alpha — device enumeration stub. */
 #include "core/api.h"
 
 int as_platform_list_devices(AsDeviceInfo *out, int max) {

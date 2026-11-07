@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.6.0 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 0.7.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -106,3 +106,6 @@ enable_testing()
 add_test(NAME alpha_selftest COMMAND audioscope-alpha selftest)
 add_test(NAME alpha_scope COMMAND audioscope-alpha scope)
 add_test(NAME alpha_fft COMMAND audioscope-alpha fft)
+add_test(NAME alpha_ui COMMAND audioscope-alpha ui
+         --web-src "${CMAKE_CURRENT_SOURCE_DIR}/web"
+         --out "${CMAKE_CURRENT_BINARY_DIR}/ui-test")

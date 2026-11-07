@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.6-alpha — platform audio backend interface.
+/* AudioScope by BerryStudio 0.7-alpha — platform audio backend interface.
  *
  * `in_index` / `out_index` refer to entries returned by
  * as_platform_list_devices(); -1 means "system default".
