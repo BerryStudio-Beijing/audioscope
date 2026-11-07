@@ -49,6 +49,7 @@ namespace {
 namespace gd = Gdiplus;
 
 using audioscope::NativeChannel;
+using audioscope::NativeDevice;
 using audioscope::NativeEngine;
 using audioscope::NativeModel;
 using audioscope::NativePlanStep;
