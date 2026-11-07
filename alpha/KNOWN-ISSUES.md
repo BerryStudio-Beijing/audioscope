@@ -1,12 +1,13 @@
-# AudioScope by BerryStudio — 0.7-alpha Known Issues
+# AudioScope by BerryStudio — 0.8-alpha Known Issues
 
-> 版本：`0.7.0-alpha.1` · 日期：2026-11-07
-> 这是 **Precision Instrument UI 验证版**，不能替代完整维修工作台。
+> 版本：`0.8.0-alpha.1` · 日期：2026-11-07
+> 这是 **Live Bridge 预览版**，不能替代完整维修工作台。
 
 ## 阻断级限制
 
 1. **没有硬件保护前端。** 软件只能预警、锁存、静音，不能阻止过压损坏声卡。不要接市电、喇叭输出、未衰减胆机输出。
-2. **UI 是本地只读 Web 快照。** 不是实时 WebSocket 音频流；没有原生 CoreGraphics/Direct2D 界面。
+2. **实时桥默认是合成数据。** `ui --live` 推送的是 `live · synthetic` 快照；`--capture` 才打开
+   真实输入，且没有实时 DSP/多设备聚合。没有原生 CoreGraphics/Direct2D 界面。
 3. **Windows 仍是 WinMM 2ch。** 不是 WASAPI，也不支持 >2ch；延迟较高。
 4. **真实跨设备漂移未接线。** `drift --live` 只说明同设备共享时钟；跨设备/聚合设备采集待后续版本。
 5. **wow/flutter 是零交叉瞬时频率法。** 需要干净 3 kHz 测试音/测试带；RMS 与峰值差 √2。
@@ -15,8 +16,10 @@
 8. **sweep / freqsweep 目前用合成信号。** 真实设备需要输出→DUT→输入闭环。
 9. **维修计划目前只跑合成验证。** `repair --live` 明确未接线。
 10. **PDF 是单页摘要。** 无图表、多页、曲线叠加。
-11. **Web UI 依赖本地 HTTP。** 直接 `file://` 打开会受浏览器字体/脚本限制；请用 `python3 -m http.server`。
-12. **Web UI 不是实时测量。** `ui` 生成快照；刷新页面看到的是同一份数据。
+11. **静态 UI 仍依赖本地 HTTP。** `file://` 打开会受字体/脚本限制；用 `ui --live`（自带服务）
+    或 `python3 -m http.server`。
+12. **Live 是控制级刷新，不是采样级流。** 每 500 ms 推送一次聚合快照（约 40 KB），
+    足够看波形/频谱移动，但不是音频流；不设置 `--interval` 时不要期待毫秒级更新。
 
 ## 平台限制
 
@@ -49,9 +52,10 @@
 
 ## 下一版必须解决
 
-1. 原生 Canvas（CoreGraphics + Direct2D）或实时 WebSocket 桥。
-2. WASAPI 共享模式 + Windows >2ch。
-3. 真实跨设备漂移/聚合设备。
-4. 真实 DUT 闭环、多页 PDF/曲线叠加。
-5. 硬件前端参考设计。
-6. Windows 真机运行测试。
+1. 实时桥接真实输入（权限、设备选择、标定）并支持多客户端背压。
+2. 原生 Canvas（CoreGraphics + Direct2D）。
+3. WASAPI 共享模式 + Windows >2ch。
+4. 真实跨设备漂移/聚合设备。
+5. 真实 DUT 闭环、多页 PDF/曲线叠加。
+6. 硬件前端参考设计。
+7. Windows 真机运行测试（含 live bridge）。

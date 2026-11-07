@@ -20,6 +20,7 @@
 | [`V0.5.md`](V0.5.md) | 0.5-alpha 实现与测试记录 | 产品/工程/测试 |
 | [`V0.6.md`](V0.6.md) | 0.6-alpha 实现与测试记录 | 产品/工程/测试 |
 | [`V0.7.md`](V0.7.md) | 0.7-alpha 实现与测试记录 | 产品/工程/测试 |
+| [`V0.8.md`](V0.8.md) | 0.8-alpha 实时桥实现与测试记录 | 产品/工程/测试 |
 
 建议在仓库中的放置方式：
 
@@ -70,6 +71,7 @@ C11 实时核心 + C++17 应用/平台层；macOS 用 CoreAudio/CoreGraphics，W
 | **0.5-alpha** | Repair Measurement Suite | THD/THD+N/SNR/SINAD/SFDR、IMD、THD vs 电平 |
 | **0.6-alpha** | Repair Plans & PDF | 维修模板、PDF 报告、THD vs 频率 |
 | **0.7-alpha** | Precision Instrument UI | MasterLens 视觉标准、Web UI、7 页、暗/明主题 |
+| **0.8-alpha** | Live Bridge | 本地 HTTP + WebSocket 实时桥、LIVE 状态、断线重连；WASAPI/DUT/多页 PDF 待续 |
 | v1.2 | Safe & Calibrated | 双端不出事、可相信 |
 | v1.3 | Multi-channel & Phase | 双端看得全、看得准 |
 | v1.4 | Repair Workflow | 双端能干活、能交付 |

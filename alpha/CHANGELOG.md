@@ -1,5 +1,31 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.8.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Local live bridge: `audioscope-alpha ui --live [--port N] [--interval MS]` starts a
+  dependency-free HTTP/1.1 + WebSocket server on `127.0.0.1`, serves the Web UI and
+  pushes the snapshot JSON every 500 ms.
+- `--capture [--device N]` opts into real input capture; failures fall back to the
+  labelled synthetic source instead of breaking the UI.
+- `--smoke` self-test (HTTP GET + WebSocket handshake + first frame) wired into
+  `make test` and CTest.
+- The Web UI shows a `LIVE / 连接中 / 离线` pill, reconnects with backoff and updates
+  the current page in place; the snapshot builder is shared with the static `ui` path.
+
+### Changed
+
+- Version 0.8.0-alpha.1.
+- `ui` snapshot generation moved to `src/app/ui_snapshot.cpp` so static and live
+  payloads cannot drift.
+- Windows build links `ws2_32`; Makefile and CMake both build the bridge.
+
+### Known limits
+
+- Live source is synthetic unless `--capture` succeeds; no native Canvas, WASAPI,
+  real DUT loopback, multi-page PDF or Windows hardware validation yet.
+
 ## 0.7.0-alpha.1 — 2026-11-07
 
 ### Added

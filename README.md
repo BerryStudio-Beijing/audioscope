@@ -4,29 +4,30 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64%20%7C%20Windows%2010%2F11%20x64-lightgrey.svg)](alpha/README.md)
-[![Status](https://img.shields.io/badge/status-0.7.0--alpha.1-orange.svg)](alpha/README.md)
+[![Status](https://img.shields.io/badge/status-0.8.0--alpha.1-orange.svg)](alpha/README.md)
 
-> **0.7-alpha（Precision Instrument UI）**：见 [`alpha/README.md`](alpha/README.md)。
-> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.7.md`](docs/plan/V0.7.md)。
+> **0.8-alpha（Live Bridge）**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.8.md`](docs/plan/V0.8.md)。
 > 原 v1.1 保留在 tag `v1.1.0-initial`；0.1–0.6-alpha 保留在各自 tag。
 >
 > **English** — AudioScope by BerryStudio is a sound-card audio repair workstation:
 > a protected, calibrated, guided measurement flow for macOS and Windows.
-> 0.7-alpha rebuilds the front end with the BerryStudio / MasterLens Precision Instrument
-> visual system and a local Web UI; v1.1 is preserved at tag `v1.1.0-initial`.
+> 0.7-alpha rebuilt the front end with the BerryStudio / MasterLens Precision Instrument
+> visual system and a local Web UI; 0.8-alpha adds a local HTTP + WebSocket live bridge.
+> v1.1 is preserved at tag `v1.1.0-initial`.
 
 ---
 
-## 0.7-alpha at a glance
+## 0.8-alpha at a glance
 
 | | |
 |---|---|
 | 定位 | 声卡音频维修工作台，不是通用示波器 |
 | 平台 | macOS 12+ arm64 · Windows 10/11 x64 |
 | 语言 | C11 实时核心 + C++17 应用/平台层 |
-| 当前版本 | `0.7.0-alpha.1`（Precision Instrument UI） |
-| 现在能做 | MasterLens 风格 Web UI（7 页、暗/明主题）、维修计划、PDF、THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准 |
-| 还没做 | 原生 GUI / 实时 WebSocket、WASAPI、真实跨设备漂移、真实 DUT 闭环、多页 PDF/曲线 |
+| 当前版本 | `0.8.0-alpha.1`（Live Bridge） |
+| 现在能做 | 本地实时 Web UI（HTTP + WebSocket，`ui --live`，LIVE/断线重连）、维修计划、PDF、THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准 |
+| 还没做 | 原生 GUI、WASAPI、真实跨设备漂移、真实 DUT 闭环、多页 PDF/曲线、Windows 真机验证 |
 | 安全 | 软件不能保护声卡；高压/未知信号必须经过受保护前端 |
 
 构建与运行：

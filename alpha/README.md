@@ -1,38 +1,50 @@
-# AudioScope by BerryStudio — 0.7-alpha (Precision Instrument UI)
+# AudioScope by BerryStudio — 0.8-alpha (Live Bridge)
 
-> **AudioScope by BerryStudio** · `0.7.0-alpha.1` · macOS + Windows · C11 core + C++17 app + local Web UI
-> 0.6-alpha 保留在 tag `v0.6.0-alpha.1`；0.5-alpha 保留在 tag `v0.5.0-alpha.1`。
+> **AudioScope by BerryStudio** · `0.8.0-alpha.1` · macOS + Windows · C11 core + C++17 app + local Web UI
+> 0.7-alpha 保留在 tag `v0.7.0-alpha.1`；0.6-alpha 保留在 tag `v0.6.0-alpha.1`。
 
-## 0.7-alpha 是什么
+## 0.8-alpha 新增了什么
 
-按同工作区的 **BerryStudio UI / MasterLens 3.0 复刻设计标准** 重做前端视觉：
+0.7 的 Web UI 是**只读快照**：`ui` 生成一次 `AUDIOSCOPE_DATA`，刷新永远是同一份。
+0.8 加了一条**本地实时桥**，仍然零第三方依赖、只监听 `127.0.0.1`：
 
-- **Precision Instrument**：暖灰石墨面板、单一鼠尾草绿 accent、琥珀/陶土红仅表达语义。
-- **1120×700** 逻辑画布、4 px 网格、Geist 字体、暗/明双主题。
-- **三种材质**：Flat 数据、Raised 面板、Recessed 图表/输入。
-- **七个页面**：波形、频谱、相位、测量、维修、报告、校准。
-- **本地 Web UI**：`audioscope-alpha ui` 把 C++ 核心生成的快照注入页面，不依赖网络/云。
+- `audioscope-alpha ui --live` 复制 Web UI 后，自己起一个极小的 HTTP/1.1 + WebSocket 服务，
+  不再需要 `python3 -m http.server`。
+- 浏览器连 `ws://127.0.0.1:<port>/ws`，服务端每 500 ms 推送一次同一个快照对象
+  （波形、频谱、THD/SNR、通道表），页面原地刷新，顶部出现 `LIVE` 状态。
+- 快照生成与静态 `ui` 共用 `ui_snapshot_json()`，不会出现两套字段。
+- 默认数据源是**合成信号**（明确标注 `live · synthetic`），因为采集需要麦克风权限；
+  `--capture` 才打开默认/指定输入，打开失败会回退并打印原因。
+- `--smoke` 在进程内跑一遍 HTTP GET + WebSocket 握手 + 收帧，`make test` / CTest 用它做回归。
 
-![主界面](web/docs/screens/main.png)
-
-![明色主题](web/docs/screens/light.png)
+0.8-alpha.1 仍**不是**完整 0.8：WASAPI、Windows >2ch、真实 DUT 闭环、多页 PDF 还没做。
 
 ## 启动 UI
 
 ```bash
 cd alpha
+make mac
 
-# 1) 只预览设计（内置合成快照）
-python3 -m http.server 8124 --bind 127.0.0.1 --directory web
-# 打开 http://127.0.0.1:8124/
-
-# 2) 注入 C++ 核心生成的快照
+# 1) 静态快照（一次性注入）
 ./build/audioscope-alpha ui --out build/ui
-python3 -m http.server 8125 --bind 127.0.0.1 --directory build/ui
+python3 -m http.server 8124 --bind 127.0.0.1 --directory build/ui
+
+# 2) 实时桥（自带 HTTP 服务，默认合成数据源）
+./build/audioscope-alpha ui --live --port 8125
 # 打开 http://127.0.0.1:8125/
+
+# 3) 实时桥 + 真实输入（会触发 macOS 麦克风权限）
+./build/audioscope-alpha ui --live --port 8125 --capture --device 2
+
+# 4) 只跑传输层自检（CI 用）
+./build/audioscope-alpha ui --live --smoke
 ```
 
-`ui` 会复制 `web/`，并把 `<!--DATA-->` 替换为 `window.AUDIOSCOPE_DATA`，包含波形、频谱、THD、XY、通道、维修计划和校准快照。
+`Ctrl-C` 停止服务。`--interval MS` 调整推送间隔（最小 100 ms），`--duration SEC` 用于自动退出。
+
+![主界面](web/docs/screens/main.png)
+
+![明色主题](web/docs/screens/light.png)
 
 ## UI 页面
 
@@ -61,7 +73,7 @@ python3 -m http.server 8125 --bind 127.0.0.1 --directory build/ui
 cd alpha
 make mac
 make win
-make test     # 47 项 selftest + ringtest + ui smoke
+make test     # 47 项 selftest + ringtest + 静态 ui smoke + live bridge smoke
 ```
 
 UI 截图（需要 Chrome）：
@@ -71,16 +83,19 @@ UI 截图（需要 Chrome）：
 # -> web/docs/screens/*.png (1120×700 @ 2×)
 ```
 
-## 0.7-alpha 的限制
+## 0.8-alpha 的限制
 
-- **Web UI 是本地只读快照**：不是实时 WebSocket 音频流；实时交互仍走 CLI。
+- **实时桥默认是合成信号**：`--capture` 才接真实输入；没有实时 DSP 重采样/多设备聚合。
 - **没有原生 GUI**：CoreGraphics/Direct2D 未实现；Web UI 是当前前端。
-- **Windows 仍是 WinMM 2ch**：WASAPI 未实现。
+- **Windows 仍是 WinMM 2ch**：WASAPI 未实现。Windows 的实时桥代码已交叉编译进 PE，
+  但本轮没有 Windows 真机可验证。
 - **维修计划仍只跑合成验证**：真实 DUT 闭环未接线。
 - **PDF 单页摘要**：无多页/图表/曲线叠加。
 - **没有硬件前端**：软件不能保护声卡。
 
 ## 后续
 
-- 0.8-alpha：原生 Canvas / WASAPI / 实时 WebSocket 桥 / 真实 DUT 闭环。
+- 0.8-alpha 剩余：WASAPI 共享模式 + >2ch、真实 DUT 闭环、多页 PDF/曲线叠加、
+  Windows 真机验证、硬件前端参考设计。
+- 机会清单见 [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「下一版必须解决」。
 - 路线图见 [`../docs/plan/ROADMAP.md`](../docs/plan/ROADMAP.md)。
