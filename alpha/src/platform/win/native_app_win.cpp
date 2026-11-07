@@ -28,6 +28,7 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <shellapi.h>
+#include <objidl.h>
 #include <gdiplus.h>
 
 #pragma comment(lib, "gdiplus.lib")
