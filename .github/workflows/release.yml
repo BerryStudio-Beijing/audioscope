@@ -81,8 +81,14 @@ jobs:
           else
             ARGS+=(--generate-notes)
           fi
+          if [[ "$TAG" == *alpha* ]]; then
+            ARGS+=(--prerelease)
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            if [[ "$TAG" == *alpha* ]]; then
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+            fi
           else
             gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt "${ARGS[@]}"
           fi
