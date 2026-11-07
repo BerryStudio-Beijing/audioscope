@@ -1,5 +1,6 @@
-/* AudioScope by BerryStudio 0.5-alpha — measurement report writer. */
+/* AudioScope by BerryStudio 0.6-alpha — measurement report writer. */
 #include "core/report.h"
+#include "core/pdf.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -344,4 +345,56 @@ int as_report_write_html(const AsReport *r, const char *path) {
         return AS_ERR_IO;
     }
     return atomic_commit(f, path, tmp);
+}
+
+int as_report_write_pdf(const AsReport *r, const char *path) {
+    if (!r || !path) return AS_ERR_INVALID;
+    AsPdf *p = as_pdf_create("AudioScope report");
+    if (!p) return AS_ERR_IO;
+    char line[256];
+    as_pdf_text(p, 50, 790, 18, AS_BRAND);
+    as_pdf_text(p, 50, 768, 10, "Measurement report");
+    as_pdf_line(p, 50, 758, 545, 758);
+    snprintf(line, sizeof(line), "Run: %s   Time: %s", r->run_id, r->timestamp);
+    as_pdf_text(p, 50, 742, 9, line);
+    snprintf(line, sizeof(line), "Platform: %s   Device: %s", r->platform, r->device);
+    as_pdf_text(p, 50, 728, 9, line);
+    snprintf(line, sizeof(line), "Mode: %s   Rate: %.0f Hz   Frames: %d   %.2f s",
+             r->input_mode, r->sample_rate, r->frames, r->seconds);
+    as_pdf_text(p, 50, 714, 9, line);
+    snprintf(line, sizeof(line), "Calibration: %s   Confidence: %s",
+             r->calibration_id, as_confidence_name(r->confidence));
+    as_pdf_text(p, 50, 700, 9, line);
+    snprintf(line, sizeof(line), "Verdict: %s", r->verdict_text);
+    as_pdf_text(p, 50, 680, 12, line);
+    as_pdf_line(p, 50, 670, 545, 670);
+    as_pdf_text(p, 50, 650, 9, "CH   Peak dBFS   RMS dBFS   Freq Hz   Vpp V   Clip");
+    double y = 634;
+    for (int i = 0; i < r->channels && i < AS_MAX_REPORT_CH; ++i) {
+        const AsChannelMeasurement *m = &r->ch[i];
+        snprintf(line, sizeof(line), "%-4s %9.1f %10.1f %9.1f %8.4f %5d",
+                 m->label, m->peak_dbfs, m->rms_dbfs, m->stats.freq,
+                 m->vpp, m->clip_count);
+        as_pdf_text(p, 50, y, 9, line);
+        y -= 15.0;
+    }
+    as_pdf_line(p, 50, y + 4, 545, y + 4);
+    y -= 12;
+    snprintf(line, sizeof(line), "Limits: max Vpp %.3f   min RMS %.1f dBFS   clip<=%d   %.0f-%.0f Hz",
+             r->limits.max_vpp, r->limits.min_rms, r->limits.max_clip_samples,
+             r->limits.min_freq_hz, r->limits.max_freq_hz);
+    as_pdf_text(p, 50, y, 8, line);
+    y -= 14;
+    snprintf(line, sizeof(line), "Repeat: %d   Vpp sigma: %.5f   Freq sigma: %.3f Hz",
+             r->repeat_count, r->vpp_std, r->freq_std);
+    as_pdf_text(p, 50, y, 8, line);
+    y -= 24;
+    as_pdf_text(p, 50, y, 8,
+                "Software cannot protect the sound card. Use a protected front end for high voltage.");
+    as_pdf_text(p, 50, y - 14, 8,
+                "Canonical report: self-contained HTML. This PDF is a printable summary.");
+    as_pdf_text(p, 50, 60, 8, "AudioScope by BerryStudio 0.6-alpha");
+    int rc = as_pdf_finish(p, path);
+    as_pdf_destroy(p);
+    return rc == 0 ? AS_OK : AS_ERR_IO;
 }

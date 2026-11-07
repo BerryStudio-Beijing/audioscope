@@ -1,4 +1,4 @@
-# AudioScope by BerryStudio 产品路线图 0.5-alpha → v2.0
+# AudioScope by BerryStudio 产品路线图 0.6-alpha → v2.0
 
 > **定位：声卡音频维修工作台**
 > 项目：AudioScope by BerryStudio
@@ -6,7 +6,7 @@
 > 目标平台：macOS 12+ arm64 + Windows 10/11 x64
 > 语言：C11 实时核心 + C++17 应用/平台层
 > 文档版本：1.2 · 2026-11-07 · 状态：Draft for build
-> 版本命名：**0.5-alpha** 是 v1.4 Repair Workflow 的测量子集；0.2–0.4-alpha 见 [`V0.2.md`](V0.2.md) / [`V0.3.md`](V0.3.md) / [`V0.4.md`](V0.4.md) / [`V0.5.md`](V0.5.md)。
+> 版本命名：**0.6-alpha** 是 v1.4 Repair Workflow 的模板/报告子集；0.2–0.5-alpha 见 [`V0.2.md`](V0.2.md) / [`V0.3.md`](V0.3.md) / [`V0.4.md`](V0.4.md) / [`V0.5.md`](V0.5.md) / [`V0.6.md`](V0.6.md)。
 > 配套文档：[`ALPHA-0.1.md`](ALPHA-0.1.md) · [`AGENTS.md`](AGENTS.md) · [`BACKLOG.md`](BACKLOG.md)
 
 ---

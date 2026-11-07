@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.5-alpha — macOS CoreAudio backend (up to 8ch float32). */
+/* AudioScope by BerryStudio 0.6-alpha — macOS CoreAudio backend (up to 8ch float32). */
 #include "platform/audio_backend.h"
 #include "core/api.h"
 #include "core/ring.h"

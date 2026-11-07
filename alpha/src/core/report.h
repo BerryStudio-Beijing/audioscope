@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.5-alpha — measurement report (JSON + HTML). */
+/* AudioScope by BerryStudio 0.6-alpha — measurement report (JSON + HTML). */
 #ifndef AS_CORE_REPORT_H
 #define AS_CORE_REPORT_H
 
@@ -60,6 +60,7 @@ void as_report_init(AsReport *report, const char *device, const char *input_mode
 int  as_report_evaluate(AsReport *report);
 int  as_report_write_json(const AsReport *report, const char *path);
 int  as_report_write_html(const AsReport *report, const char *path);
+int  as_report_write_pdf(const AsReport *report, const char *path);
 const char *as_verdict_name(int verdict);
 
 #ifdef __cplusplus

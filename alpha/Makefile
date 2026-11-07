@@ -27,6 +27,7 @@ CORE_C := \
 	src/core/stats.c \
 	src/core/generator.c \
 	src/core/input_mode.c \
+	src/core/pdf.c \
 	src/core/phase.c \
 	src/core/repair.c \
 	src/core/spectrogram.c \
@@ -116,8 +117,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.5.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.5.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-0.6.0-alpha.1-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-0.6.0-alpha.1-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

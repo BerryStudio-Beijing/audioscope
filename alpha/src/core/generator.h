@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.5-alpha — signal generator (mono float). */
+/* AudioScope by BerryStudio 0.6-alpha — signal generator (mono float). */
 #ifndef AS_CORE_GENERATOR_H
 #define AS_CORE_GENERATOR_H
 

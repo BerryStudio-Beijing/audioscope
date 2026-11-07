@@ -3,6 +3,7 @@
 #include "core/api.h"
 #include "core/fft.h"
 #include "core/generator.h"
+#include "core/pdf.h"
 #include "core/phase.h"
 #include "core/repair.h"
 #include "core/report.h"
@@ -57,7 +58,7 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "%s %s — sound-card audio repair workstation (0.5-alpha)\n"
+        "%s %s — sound-card audio repair workstation (0.6-alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
@@ -76,6 +77,9 @@ void print_help() {
         "  audioscope-alpha thd [seconds] [--synthetic --freq HZ --level DBFS --thd PCT]\n"
         "  audioscope-alpha imd [seconds] [--synthetic --standard smpte|din]\n"
         "  audioscope-alpha sweep [--start DBFS --end DBFS --step DB --csv FILE]\n"
+        "  audioscope-alpha freqsweep [--start HZ --end HZ --points N --csv FILE]\n"
+        "  audioscope-alpha templates\n"
+        "  audioscope-alpha repair --template quick|pedal|tape|mixer|headphone [--out DIR]\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -549,10 +553,17 @@ int run_self_test() {
     check(as_report_evaluate(&rep) == AS_OK && rep.verdict == 0, "report pass");
     std::string json = (tmp / "report.json").string();
     std::string html = (tmp / "report.html").string();
+    std::string pdf = (tmp / "report.pdf").string();
     check(as_report_write_json(&rep, json.c_str()) == AS_OK, "report json");
     check(as_report_write_html(&rep, html.c_str()) == AS_OK, "report html");
+    check(as_report_write_pdf(&rep, pdf.c_str()) == AS_OK, "report pdf");
     check(fs::exists(json) && fs::file_size(json) > 100, "report json exists");
     check(fs::exists(html) && fs::file_size(html) > 200, "report html exists");
+    check(fs::exists(pdf) && fs::file_size(pdf) > 500, "report pdf exists");
+    std::ifstream pdf_in(pdf, std::ios::binary);
+    char pdf_head[9] = {0};
+    pdf_in.read(pdf_head, 8);
+    check(std::string(pdf_head).find("%PDF-1.4") == 0, "report pdf header");
     std::ifstream in(html);
     std::string html_text((std::istreambuf_iterator<char>(in)),
                           std::istreambuf_iterator<char>());
@@ -1049,7 +1060,7 @@ int cmd_session(const std::string &dir) {
         std::fprintf(stderr, "session create failed\n");
         return 1;
     }
-    as_session_event(s, "app_start", "{\"version\":\"0.5.0-alpha.1\"}");
+    as_session_event(s, "app_start", "{\"version\":\"0.6.0-alpha.1\"}");
     as_session_event(s, "input_mode", "{\"mode\":\"inst\"}");
     as_session_event(s, "note", "{\"text\":\"v0.2 session demo\"}");
     std::printf("session: %s (%d events)\n", as_session_path(s), as_session_count(s));
@@ -1362,8 +1373,10 @@ int cmd_measure(const std::vector<std::string> &args) {
     std::filesystem::create_directories(out_dir, ec);
     std::string json = out_dir + "/" + rep.run_id + ".json";
     std::string html = out_dir + "/" + rep.run_id + ".html";
+    std::string pdf = out_dir + "/" + rep.run_id + ".pdf";
     int rc_json = as_report_write_json(&rep, json.c_str());
     int rc_html = as_report_write_html(&rep, html.c_str());
+    int rc_pdf = as_report_write_pdf(&rep, pdf.c_str());
 
     AsSession *session = as_session_create(out_dir.c_str(), rep.run_id);
     if (session) {
@@ -1390,6 +1403,7 @@ int cmd_measure(const std::vector<std::string> &args) {
     if (!have_cal) std::printf("  voltage unavailable: no calibration (dBFS only)\n");
     if (rc_json == AS_OK) std::printf("  JSON: %s\n", json.c_str());
     if (rc_html == AS_OK) std::printf("  HTML: %s\n", html.c_str());
+    if (rc_pdf == AS_OK) std::printf("  PDF:  %s\n", pdf.c_str());
 
     as_audio_close(audio);
     as_safety_stop(guard);
@@ -1763,6 +1777,248 @@ int cmd_sweep(const std::vector<std::string> &args) {
 }
 
 
+int cmd_freqsweep(const std::vector<std::string> &args) {
+    double start = opt_num(args, "--start", 20.0);
+    double end = opt_num(args, "--end", 20000.0);
+    int points = opt_int(args, "--points", 10);
+    double level = opt_num(args, "--level", -6.0);
+    double thd_in = opt_num(args, "--thd", 0.1);
+    if (start < 10.0 || end <= start || points < 2 || points > 100) {
+        std::fprintf(stderr, "invalid frequency sweep range\n");
+        return 1;
+    }
+    std::string csv = opt_value(args, "--csv", "");
+    FILE *f = csv.empty() ? nullptr : std::fopen(csv.c_str(), "wb");
+    if (!csv.empty() && !f) {
+        std::fprintf(stderr, "cannot write %s\n", csv.c_str());
+        return 1;
+    }
+    if (f) std::fprintf(f, "freq_hz,thd_pct,thdn_pct,snr_db\n");
+    std::printf("%10s %10s %10s %10s\n", "Hz", "THD%", "THD+N%", "SNR dB");
+    const int n = 32768;
+    for (int i = 0; i < points; ++i) {
+        double t = points > 1 ? (double)i / (double)(points - 1) : 0.0;
+        double freq = start * std::pow(end / start, t);
+        std::vector<float> x;
+        make_tone_signal(&x, n, kSampleRate, freq, level, thd_in);
+        AsToneResult r;
+        if (as_tone_analyze(x.data(), n, kSampleRate, &r) != 0) continue;
+        std::printf("%10.1f %10.4f %10.4f %10.2f\n", freq, r.thd_pct, r.thdn_pct, r.snr_db);
+        if (f) std::fprintf(f, "%.1f,%.6f,%.6f,%.6f\n",
+                            freq, r.thd_pct, r.thdn_pct, r.snr_db);
+    }
+    if (f) std::fclose(f);
+    return 0;
+}
+
+
+struct PlanStep {
+    std::string id;
+    std::string label;
+    std::string unit;
+    double value;
+    bool pass;
+    std::string detail;
+};
+
+struct PlanDef {
+    const char *id;
+    const char *label;
+    const char *description;
+    const char *steps[5];
+    int count;
+};
+
+static const PlanDef kPlans[] = {
+    {"quick", "Quick check", "THD + IMD smoke test", {"thd", "imd", nullptr, nullptr, nullptr}, 2},
+    {"pedal", "Pedal / stompbox", "THD + IMD", {"thd", "imd", nullptr, nullptr, nullptr}, 2},
+    {"tape", "Tape deck", "Wow/flutter + azimuth + THD", {"wow", "azimuth", "thd", nullptr, nullptr}, 3},
+    {"mixer", "Mixer channel", "THD + IMD + crosstalk", {"thd", "imd", "crosstalk", nullptr, nullptr}, 3},
+    {"headphone", "Headphone amp", "THD + IMD + crosstalk", {"thd", "imd", "crosstalk", nullptr, nullptr}, 3},
+};
+
+static const PlanDef *find_plan(const std::string &id) {
+    for (const PlanDef &p : kPlans) if (id == p.id) return &p;
+    return nullptr;
+}
+
+static bool synth_thd(double *out) {
+    std::vector<float> x;
+    make_tone_signal(&x, 32768, kSampleRate, 1000.0, -6.0, 0.1);
+    AsToneResult r;
+    if (as_tone_analyze(x.data(), (int)x.size(), kSampleRate, &r) != 0) return false;
+    *out = r.thd_pct;
+    return true;
+}
+
+static bool synth_imd(double *out) {
+    int n = 32768;
+    std::vector<float> x((size_t)n);
+    for (int i = 0; i < n; ++i) {
+        double t = (double)i / kSampleRate;
+        double f1 = 60.0, f2 = 7000.0, side = 0.1 * 0.0005;
+        double v = 0.4 * std::sin(2.0 * 3.14159265358979323846 * f1 * t)
+                 + 0.1 * std::sin(2.0 * 3.14159265358979323846 * f2 * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 - 2.0 * f1) * t)
+                 + side * std::sin(2.0 * 3.14159265358979323846 * (f2 + 2.0 * f1) * t);
+        x[(size_t)i] = (float)v;
+    }
+    double imd = 0.0;
+    if (as_imd_analyze(x.data(), n, kSampleRate, 0, &imd, nullptr, nullptr) != 0) return false;
+    *out = imd;
+    return true;
+}
+
+static bool synth_wow(double *wow, double *flutter) {
+    int n = 5 * (int)kSampleRate;
+    std::vector<float> x((size_t)n);
+    double phase = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double t = (double)i / kSampleRate;
+        double f = 3000.0 * (1.0 + 0.003 * std::sin(2.0 * 3.14159265358979323846 * 0.5 * t)
+                                + 0.001 * std::sin(2.0 * 3.14159265358979323846 * 8.0 * t));
+        phase += 2.0 * 3.14159265358979323846 * f / kSampleRate;
+        x[(size_t)i] = (float)(0.5 * std::sin(phase));
+    }
+    AsWowResult r;
+    if (as_wow_measure(x.data(), n, kSampleRate, &r) != 0) return false;
+    *wow = r.wow_pct;
+    *flutter = r.flutter_pct;
+    return true;
+}
+
+static bool synth_azimuth(double *phase) {
+    int n = 2 * (int)kSampleRate;
+    std::vector<float> l((size_t)n), r((size_t)n);
+    double pr = 10.0 * 3.14159265358979323846 / 180.0;
+    for (int i = 0; i < n; ++i) {
+        double t = (double)i / kSampleRate;
+        l[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 10000.0 * t));
+        r[(size_t)i] = (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 10000.0 * t + pr));
+    }
+    AsPhaseResult res;
+    if (as_phase_measure(l.data(), r.data(), n, kSampleRate, &res) != 0) return false;
+    *phase = res.phase_deg;
+    return true;
+}
+
+static bool synth_crosstalk(double *db) {
+    int n = 2 * (int)kSampleRate;
+    std::vector<float> a((size_t)n), b((size_t)n);
+    for (int i = 0; i < n; ++i) {
+        double t = (double)i / kSampleRate;
+        double s = 0.1 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t);
+        a[(size_t)i] = (float)s;
+        b[(size_t)i] = (float)(s * 0.001);
+    }
+    return as_crosstalk_db(a.data(), b.data(), n, db) == 0;
+}
+
+int cmd_templates() {
+    std::printf("%-12s %-24s %s\n", "id", "label", "steps");
+    for (const PlanDef &p : kPlans) {
+        std::printf("%-12s %-24s ", p.id, p.label);
+        for (int i = 0; i < p.count; ++i)
+            std::printf("%s%s", i ? "," : "", p.steps[i]);
+        std::printf("\n");
+    }
+    return 0;
+}
+
+int cmd_repair(const std::vector<std::string> &args) {
+    std::string id = opt_value(args, "--template", "quick");
+    const PlanDef *plan = find_plan(id);
+    if (!plan) {
+        std::fprintf(stderr, "unknown template '%s'; use templates\n", id.c_str());
+        return 1;
+    }
+    if (has_flag(args, "--live")) {
+        std::fprintf(stderr, "live repair plans are not wired yet; use --synthetic for now.\n");
+        return 1;
+    }
+    std::string out_dir = opt_value(args, "--out", "repairs");
+    std::error_code ec;
+    std::filesystem::create_directories(out_dir, ec);
+    std::vector<PlanStep> results;
+    for (int i = 0; i < plan->count; ++i) {
+        std::string step = plan->steps[i];
+        if (step == "thd") {
+            double v = 0.0;
+            bool ok = synth_thd(&v);
+            results.push_back({"thd", "THD", "%", v, ok && v <= 0.5, ok ? "" : "analysis failed"});
+        } else if (step == "imd") {
+            double v = 0.0;
+            bool ok = synth_imd(&v);
+            results.push_back({"imd", "IMD SMPTE", "%", v, ok && v <= 0.5, ok ? "" : "analysis failed"});
+        } else if (step == "wow") {
+            double w = 0.0, f = 0.0;
+            bool ok = synth_wow(&w, &f);
+            results.push_back({"wow", "Wow", "% RMS", w, ok && w <= 0.5, ok ? "" : "analysis failed"});
+            results.push_back({"flutter", "Flutter", "% RMS", f, ok && f <= 0.2, ok ? "" : "analysis failed"});
+        } else if (step == "azimuth") {
+            double v = 0.0;
+            bool ok = synth_azimuth(&v);
+            results.push_back({"azimuth", "Azimuth phase", "deg", v, ok && std::fabs(v) <= 15.0, ok ? "" : "analysis failed"});
+        } else if (step == "crosstalk") {
+            double v = 0.0;
+            bool ok = synth_crosstalk(&v);
+            results.push_back({"crosstalk", "Crosstalk", "dB", v, ok && v <= -40.0, ok ? "" : "analysis failed"});
+        }
+    }
+    bool pass = true;
+    for (const PlanStep &r : results) if (!r.pass) pass = false;
+    std::string base = out_dir + "/repair-" + id;
+    std::string json = base + ".json";
+    std::string pdf = base + ".pdf";
+    {
+        std::ofstream out(json);
+        out << "{\n  \"template\": \"" << id << "\",\n  \"verdict\": \""
+            << (pass ? "PASS" : "FAIL") << "\",\n  \"steps\": [\n";
+        for (size_t i = 0; i < results.size(); ++i) {
+            const PlanStep &r = results[i];
+            out << "    {\"id\":\"" << r.id << "\",\"label\":\"" << r.label
+                << "\",\"value\":" << r.value << ",\"unit\":\"" << r.unit
+                << "\",\"pass\":" << (r.pass ? "true" : "false") << "}";
+            out << (i + 1 == results.size() ? "\n" : ",\n");
+        }
+        out << "  ]\n}\n";
+    }
+    AsPdf *doc = as_pdf_create("AudioScope repair plan");
+    if (doc) {
+        char line[256];
+        as_pdf_text(doc, 50, 790, 18, AS_BRAND);
+        as_pdf_text(doc, 50, 768, 10, "Repair plan summary");
+        as_pdf_line(doc, 50, 758, 545, 758);
+        snprintf(line, sizeof(line), "Template: %s (%s)", plan->id, plan->label);
+        as_pdf_text(doc, 50, 742, 10, line);
+        snprintf(line, sizeof(line), "Verdict: %s", pass ? "PASS" : "FAIL");
+        as_pdf_text(doc, 50, 724, 14, line);
+        as_pdf_line(doc, 50, 714, 545, 714);
+        double y = 694;
+        for (const PlanStep &r : results) {
+            snprintf(line, sizeof(line), "%-18s %10.4f %-6s  %s",
+                     r.label.c_str(), r.value, r.unit.c_str(), r.pass ? "PASS" : "FAIL");
+            as_pdf_text(doc, 50, y, 10, line);
+            y -= 18;
+        }
+        as_pdf_line(doc, 50, y + 6, 545, y + 6);
+        as_pdf_text(doc, 50, y - 8, 8,
+                    "Synthetic verification only; live DUT loopback is not wired in 0.6-alpha.");
+        as_pdf_text(doc, 50, 60, 8, "AudioScope by BerryStudio 0.6-alpha");
+        as_pdf_finish(doc, pdf.c_str());
+        as_pdf_destroy(doc);
+    }
+    std::printf("repair plan: %s · %s\n", plan->id, pass ? "PASS" : "FAIL");
+    for (const PlanStep &r : results)
+        std::printf("  %-18s %10.4f %-6s %s\n", r.label.c_str(), r.value,
+                    r.unit.c_str(), r.pass ? "PASS" : "FAIL");
+    std::printf("  JSON: %s\n  PDF:  %s\n", json.c_str(), pdf.c_str());
+    return pass ? 0 : 1;
+}
+
+
 } // namespace
 
 int run_alpha_cli(int argc, char **argv) {
@@ -1802,6 +2058,9 @@ int run_alpha_cli(int argc, char **argv) {
     if (cmd == "thd") return cmd_thd(args);
     if (cmd == "imd") return cmd_imd(args);
     if (cmd == "sweep") return cmd_sweep(args);
+    if (cmd == "freqsweep") return cmd_freqsweep(args);
+    if (cmd == "templates") return cmd_templates();
+    if (cmd == "repair") return cmd_repair(args);
     if (cmd == "tone") return cmd_tone(args);
     if (cmd == "session") return cmd_session(args.size() > 2 ? args[2] : "build/session");
     if (cmd == "calibrate") return cmd_calibrate(args);

@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.5-alpha — THD/IMD measurement. */
+/* AudioScope by BerryStudio 0.6-alpha — THD/IMD measurement. */
 #ifndef AS_CORE_TONE_H
 #define AS_CORE_TONE_H
 

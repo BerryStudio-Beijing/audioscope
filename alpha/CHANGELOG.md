@@ -1,5 +1,21 @@
 # AudioScope by BerryStudio — Changelog
 
+## 0.6.0-alpha.1 — 2026-11-07
+
+### Added
+
+- Built-in repair plans: quick / pedal / tape / mixer / headphone (`templates`, `repair`).
+- PDF report for measurements (`measure` now writes JSON + HTML + PDF).
+- Repair plan summary PDF + JSON.
+- THD vs frequency sweep (`freqsweep`) with CSV export.
+- Minimal single-page PDF writer (Helvetica, text/lines/rects).
+- Selftest expanded to 47 checks (PDF header/exists, report PDF).
+
+### Changed
+
+- Version 0.6.0-alpha.1.
+- Repair plan runner is synthetic-only in this alpha; live loopback is explicitly not wired.
+
 ## 0.5.0-alpha.1 — 2026-11-07
 
 ### Added

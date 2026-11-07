@@ -11,7 +11,7 @@
 - **代码基线**：AudioScope 1.1，macOS 12+ / arm64 / 纯 C11 / Apache-2.0。
 - **目标平台**：macOS 12+ arm64 + Windows 10/11 x64。
 - **语言**：C11 实时核心 + C++17 应用/平台层；macOS 用 Objective-C++ 桥接。
-- **当前目标**：0.5-alpha Repair Measurement Suite（对应路线图 v1.4 的测量子集）；0.6-alpha 再做原生 GUI/WASAPI/维修模板/PDF。
+- **当前目标**：0.6-alpha Repair Plans & PDF（对应路线图 v1.4 的工作流/报告子集）；0.7-alpha 再做原生 GUI/WASAPI/真实 DUT 闭环。
 - **核心用户**：初学者、独立维修技师、音频硬件开发者、教学者。
 
 产品原则：**安全 > 可信 > 工作流 > 报告 > 双端一致性 > 价格**。
@@ -102,7 +102,7 @@ src/
 └── tests/            selftest.c、unit.c
 ```
 
-**0.5-alpha 目标结构（增量迁移）**
+**0.6-alpha 目标结构（增量迁移）**
 
 ```
 CMakeLists.txt
@@ -386,7 +386,7 @@ tests/
 
 ## 20. 发布
 
-- 版本号：`MAJOR.MINOR.PATCH`；alpha 用 `0.5.0-alpha`；schema 独立版本。
+- 版本号：`MAJOR.MINOR.PATCH`；alpha 用 `0.6.0-alpha`；schema 独立版本。
 - 发布前跑完整门禁（见 `ROADMAP.md` §8.3），双端 CI 必须绿。
 - tag → macOS/Windows 构建 → 签名/公证（v2.0）→ release notes。
 - macOS：`.app`/DMG；Windows：便携 ZIP（alpha）→ MSI/EXE（v2.0）。

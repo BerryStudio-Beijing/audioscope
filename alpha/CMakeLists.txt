@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.5.0 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 0.6.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -31,6 +31,7 @@ set(AS_CORE_SOURCES
     src/core/stats.c
     src/core/generator.c
     src/core/input_mode.c
+    src/core/pdf.c
     src/core/phase.c
     src/core/repair.c
     src/core/spectrogram.c

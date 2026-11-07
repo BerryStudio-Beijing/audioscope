@@ -1,7 +1,7 @@
-# AudioScope by BerryStudio — 0.5-alpha Known Issues
+# AudioScope by BerryStudio — 0.6-alpha Known Issues
 
-> 版本：`0.5.0-alpha.1` · 日期：2026-11-07
-> 这是 **Repair Measurement 核心验证版**，不能替代完整维修工作台。
+> 版本：`0.6.0-alpha.1` · 日期：2026-11-07
+> 这是 **Repair Plans & PDF 核心验证版**，不能替代完整维修工作台。
 
 ## 阻断级限制
 
@@ -12,8 +12,9 @@
 5. **wow/flutter 是零交叉瞬时频率法。** 需要干净 3 kHz 测试音/测试带；RMS 与峰值差 √2。
 6. **阻抗是手动串联电阻法。** 需要用户提供 R、Vsource、Vdut。
 7. **THD/IMD 是单音/双音 FFT。** 没有 THD vs 频率、没有完整 IMD 标准套件。
-8. **sweep 目前用合成信号。** 真实设备需要输出→DUT→输入闭环。
-9. **没有维修模板/PDF。**
+8. **sweep / freqsweep 目前用合成信号。** 真实设备需要输出→DUT→输入闭环。
+9. **维修计划目前只跑合成验证。** `repair --live` 明确未接线。
+10. **PDF 是单页摘要。** 无图表、多页、曲线叠加。
 
 ## 平台限制
 
@@ -49,6 +50,6 @@
 1. 原生 Canvas（CoreGraphics + Direct2D）+ 缩放/双光标。
 2. WASAPI 共享模式 + Windows >2ch。
 3. 真实跨设备漂移/聚合设备。
-4. 维修模板、PDF 报告、THD vs 频率。
+4. 真实 DUT 闭环、多页 PDF/曲线叠加。
 5. 硬件前端参考设计。
 6. Windows 真机运行测试。

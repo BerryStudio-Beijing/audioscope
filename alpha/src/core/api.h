@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.5-alpha — stable C ABI for the portable measurement core.
+/* AudioScope by BerryStudio 0.6-alpha — stable C ABI for the portable measurement core.
  *
  * This header is the boundary between the C11 realtime core and the C++17
  * application/platform layers. It must stay includable from both C and C++,
@@ -15,9 +15,9 @@ extern "C" {
 #endif
 
 #define AS_BRAND "AudioScope by BerryStudio"
-#define AS_VERSION "0.5.0-alpha.1"
+#define AS_VERSION "0.6.0-alpha.1"
 #define AS_VERSION_MAJOR 0
-#define AS_VERSION_MINOR 5
+#define AS_VERSION_MINOR 6
 #define AS_VERSION_PATCH 0
 #define AS_ALPHA_VERSION AS_VERSION
 
