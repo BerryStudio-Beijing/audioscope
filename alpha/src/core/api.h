@@ -15,9 +15,9 @@ extern "C" {
 #endif
 
 #define AS_BRAND "AudioScope by BerryStudio"
-#define AS_VERSION "0.8.0-alpha.1"
+#define AS_VERSION "0.9.0-alpha.1"
 #define AS_VERSION_MAJOR 0
-#define AS_VERSION_MINOR 8
+#define AS_VERSION_MINOR 9
 #define AS_VERSION_PATCH 0
 #define AS_ALPHA_VERSION AS_VERSION
 

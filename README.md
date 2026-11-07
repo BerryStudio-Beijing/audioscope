@@ -4,40 +4,42 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64%20%7C%20Windows%2010%2F11%20x64-lightgrey.svg)](alpha/README.md)
-[![Status](https://img.shields.io/badge/status-0.8.0--alpha.1-orange.svg)](alpha/README.md)
+[![Status](https://img.shields.io/badge/status-0.9.0--alpha.1-orange.svg)](alpha/README.md)
 
-> **0.8-alpha（Live Bridge）**：见 [`alpha/README.md`](alpha/README.md)。
-> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.8.md`](docs/plan/V0.8.md)。
+> **0.9-alpha（Native）**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.9.md`](docs/plan/V0.9.md)。
 > 原 v1.1 保留在 tag `v1.1.0-initial`；0.1–0.6-alpha 保留在各自 tag。
 >
 > **English** — AudioScope by BerryStudio is a sound-card audio repair workstation:
 > a protected, calibrated, guided measurement flow for macOS and Windows.
-> 0.7-alpha rebuilt the front end with the BerryStudio / MasterLens Precision Instrument
-> visual system and a local Web UI; 0.8-alpha adds a local HTTP + WebSocket live bridge.
-> v1.1 is preserved at tag `v1.1.0-initial`.
+> 0.9-alpha removes the Web UI and ships native apps: a macOS `.app` (AppKit +
+> CoreGraphics) and an installable Windows build (Win32 + GDI+). Multi-page PDF
+> and a loopback measurement are included. v1.1 is preserved at tag
+> `v1.1.0-initial`.
 
 ---
 
-## 0.8-alpha at a glance
+## 0.9-alpha at a glance
 
 | | |
 |---|---|
 | 定位 | 声卡音频维修工作台，不是通用示波器 |
 | 平台 | macOS 12+ arm64 · Windows 10/11 x64 |
 | 语言 | C11 实时核心 + C++17 应用/平台层 |
-| 当前版本 | `0.8.0-alpha.1`（Live Bridge） |
-| 现在能做 | 本地实时 Web UI（HTTP + WebSocket，`ui --live`，LIVE/断线重连）、维修计划、PDF、THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准 |
-| 还没做 | 原生 GUI、WASAPI、真实跨设备漂移、真实 DUT 闭环、多页 PDF/曲线、Windows 真机验证 |
+| 当前版本 | `0.9.0-alpha.1`（Native） |
+| 现在能做 | 原生 macOS `.app` / Windows 安装包、七页界面、多页 PDF、loopback、维修计划、THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准 |
+| 还没做 | WASAPI、设备选择、校准向导、游标/缩放、签名/公证、Windows 真机音频验证 |
 | 安全 | 软件不能保护声卡；高压/未知信号必须经过受保护前端 |
 
 构建与运行：
 
 ```bash
 cd alpha
-make mac          # macOS
-make win          # Windows cross-build (mingw-w64)
-make test
-./build/audioscope-alpha help
+make app          # macOS: build/AudioScope.app
+make mac          # CLI
+make test         # selftest + native --shot regression
+make win          # Windows CLI cross-build (mingw-w64)
+# Windows native exe + installer are built by CI (MSVC + Inno Setup).
 ```
 
 ---
@@ -86,9 +88,8 @@ make win-core   # （可选）用 mingw-w64 交叉编译纯 C 核心为 Windows 
 ```
 
 运行要求：Apple Silicon（arm64），macOS 12.0 或更新（二进制 `minos=12.0`）。
-Windows 版暂不提供：界面与音频用的是 Cocoa / CoreAudio / CoreText 原生实现，
-Windows 需要独立的 Win32 + Direct2D + WASAPI 平台层；仓库里的 `win/core_main.c`
-只是纯 C 测量内核的交叉编译脚手架，不是可用的图形版。
+0.9 起 Windows 有独立的 Win32 + GDI+ 图形版和安装包；音频仍是 WinMM 2ch，
+WASAPI 尚未实现。`win/core_main.c` 仍保留为纯 C 测量内核的交叉编译脚手架。
 
 只依赖 Xcode Command Line Tools（clang + macOS SDK），**没有任何第三方库**。
 链接的系统框架：Cocoa、CoreAudio、AudioToolbox、AudioUnit、CoreGraphics、CoreText、ImageIO。

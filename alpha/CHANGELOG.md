@@ -1,152 +1,45 @@
 # AudioScope by BerryStudio — Changelog
 
-## 0.8.0-alpha.1 — 2026-11-07
+## 0.9.0-alpha.1 — 2026-11-07
 
 ### Added
 
-- Local live bridge: `audioscope-alpha ui --live [--port N] [--interval MS]` starts a
-  dependency-free HTTP/1.1 + WebSocket server on `127.0.0.1`, serves the Web UI and
-  pushes the snapshot JSON every 500 ms.
-- `--capture [--device N]` opts into real input capture; failures fall back to the
-  labelled synthetic source instead of breaking the UI.
-- `--smoke` self-test (HTTP GET + WebSocket handshake + first frame) wired into
-  `make test` and CTest.
-- The Web UI shows a `LIVE / 连接中 / 离线` pill, reconnects with backoff and updates
-  the current page in place; the snapshot builder is shared with the static `ui` path.
+- **Native macOS application** (`AudioScope.app`): AppKit window, CoreGraphics
+  canvas, CoreText, Geist Regular/Medium/Bold and Geist Mono bundled from
+  `assets/fonts`. Seven pages: scope, spectrum, XY, measure, repair, reports,
+  calibration. Keyboard `1–7`, space to hold, `C` capture, `R` run plan,
+  `E` export, `T` theme.
+- **Native Windows application** (`AudioScope.exe`): Win32 window + GDI+
+  rendering, same seven pages and design tokens, plus an Inno Setup
+  **installer** (`AudioScope-0.9.0-alpha.1-windows-x64-setup.exe`).
+- **Multi-page PDF**: report page 1 keeps the summary; page 2 adds the
+  waveform chart; page 3 adds the spectrum chart (`as_pdf_new_page`,
+  `as_pdf_polyline`, `as_report_write_pdf_ex`).
+- **Loopback measurement** in the native app: −20 dBFS 1 kHz tone on the
+  default output, capture from the default input, level/THD verdict. Requires
+  explicit confirmation.
+- `AudioScope --shot DIR` renders all seven pages offscreen at 2× for visual
+  regression and CI.
 
 ### Changed
 
-- Version 0.8.0-alpha.1.
-- `ui` snapshot generation moved to `src/app/ui_snapshot.cpp` so static and live
-  payloads cannot drift.
-- Windows build links `ws2_32`; Makefile and CMake both build the bridge.
+- Version 0.9.0-alpha.1.
+- **Web UI removed**: `alpha/web/`, the live HTTP/WebSocket bridge, the
+  `AUDIOSCOPE_DATA` injection and `ui --live` are gone. All rendering is now
+  local AppKit/CoreGraphics on macOS and Win32/GDI+ on Windows.
+- Geist fonts moved to `alpha/assets/fonts/` and are embedded in the `.app`.
+- Capture remains opt-in and visible; synthetic data is the default.
 
 ### Known limits
 
-- Live source is synthetic unless `--capture` succeeds; no native Canvas, WASAPI,
-  real DUT loopback, multi-page PDF or Windows hardware validation yet.
+- Windows audio is still WinMM 2ch; WASAPI shared mode and >2ch are not in this
+  alpha.
+- Windows binaries are unsigned (SmartScreen) and were compile/tested on CI,
+  not on a Windows audio machine.
+- Loopback needs a physical or virtual output→input route; it is not a
+  calibrated DUT measurement.
+- Voltage stays hidden until a measured calibration profile exists.
 
-## 0.7.0-alpha.1 — 2026-11-07
+## 0.8.0-alpha.1 — 2026-11-07
 
-### Added
-
-- Precision Instrument Web UI redesigned against the BerryStudio UI / MasterLens 3.0
-  visual reference: 1120×700 canvas, Geist, dark/light tokens, three materials,
-  4 px grid, seven pages.
-- `audioscope-alpha ui` command: copies the web UI and injects a C++-generated
-  snapshot (waveform, spectrum, THD, XY, channels, repair plan, calibration).
-- UI screenshot script and reference screenshots.
-- UI smoke test in `make test` / CTest.
-
-### Changed
-
-- Version 0.7.0-alpha.1.
-- CLI/TUI remains for measurement; Web UI is the new visual front end (local,
-  read-only snapshot, no network).
-
-## 0.6.0-alpha.1 — 2026-11-07
-
-### Added
-
-- Built-in repair plans: quick / pedal / tape / mixer / headphone (`templates`, `repair`).
-- PDF report for measurements (`measure` now writes JSON + HTML + PDF).
-- Repair plan summary PDF + JSON.
-- THD vs frequency sweep (`freqsweep`) with CSV export.
-- Minimal single-page PDF writer (Helvetica, text/lines/rects).
-- Selftest expanded to 47 checks (PDF header/exists, report PDF).
-
-### Changed
-
-- Version 0.6.0-alpha.1.
-- Repair plan runner is synthetic-only in this alpha; live loopback is explicitly not wired.
-
-## 0.5.0-alpha.1 — 2026-11-07
-
-### Added
-
-- THD / THD+N / SNR / SINAD / SFDR / ENOB single-tone analysis.
-- IMD SMPTE (60 Hz + 7 kHz) and DIN (250 Hz + 8 kHz).
-- THD vs level sweep with CSV export.
-- `thd`, `imd`, `sweep` commands.
-- Selftest expanded to 44 checks (THD 0.1%, IMD 0.1%).
-
-### Changed
-
-- Version 0.5.0-alpha.1.
-- Repair measurement suite focus; native GUI/WASAPI remain future work.
-
-## 0.4.0-alpha.1 — 2026-11-07
-
-### Added
-
-- Wow & flutter measurement from a 3 kHz tone/test tape; RMS wow/flutter % and speed ppm.
-- Crosstalk measurement CH1 -> CH2 in dB.
-- Series-resistor impedance measurement.
-- Azimuth measurement from 10 kHz L/R phase.
-- `compare` command for before/after report JSON deltas.
-- Selftest expanded to 42 checks (wow/flutter, crosstalk, impedance).
-
-### Changed
-
-- Version 0.4.0-alpha.1.
-- Repair workflow focused release; native GUI/WASAPI remain future work.
-
-## 0.3.0-alpha.1 — 2026-11-07
-
-### Added
-
-- Multi-channel capture: macOS CoreAudio backend now exposes up to 8 input channels; ring/report support 8 channels.
-- `measure --channels all|0,1` multi-channel measurement with per-channel stats, limits and report rows.
-- `xy` command: ASCII Lissajous + phase/gain/polarity readout; `--simulate` with phase/gain/drift.
-- `drift` command: 100 ppm simulation + estimation; live same-device capture explicitly reports that drift is not observable.
-- `spectrogram` command: time × log-frequency dB matrix, ASCII heatmap, peak row readout.
-- Core phase measurement (`as_phase_measure`) and drift estimation (`as_drift_estimate`).
-- Core spectrogram matrix (`AsSpectrogram`) with log-frequency rows.
-- Selftest expanded to 39 checks (phase/gain, 100 ppm drift, spectrogram, multi-channel report).
-
-### Changed
-
-- Version 0.3.0-alpha.1.
-- Report channel array expanded from 2 to 8.
-- `devices` shows input/output channel counts.
-
-## 0.2.0-alpha.1 — 2026-11-07
-
-### Added
-
-- Input mode presets (Line Pro / Line Consumer / DI / Inst / Mic / Probe) with nominal level, max Vpp, impedance, phantom and front-end requirements.
-- SafetyGuard feed path: clip detection/latch over interleaved frames; range recommendation.
-- Calibration schema v2 extended with `pad_db` and `sample_rate`; per-device/channel/gain/pad/rate profile; CLI calibration wizard.
-- Report schema v2: JSON + self-contained HTML; limits, verdict, repeatability, provenance.
-- `measure` command: capture, limits, verdict, JSON/HTML, session event.
-- `check` command: signal check assistant (peak/RMS/crest/hum/tilt) with advisory suggestion only.
-- `calibrate`/`calibs` commands.
-- Expanded selftest: input modes, clip feed, calibration pad/rate, report JSON/HTML, verdict.
-
-### Changed
-
-- Version 0.2.0-alpha.1.
-- `tone` defaults to −20 dBFS output limit; `--allow-loud` required for higher.
-- Branding: AudioScope by BerryStudio.
-
-## 0.1.0-alpha.1 — 2026-11-07
-
-### Added
-
-- 独立的 `alpha/` 双端基线：C11 核心 + C++17 应用/UI。
-- C ABI：版本、单位换算、SafetyGuard、单点校准、JSONL 会话日志。
-- 便携核心：radix-2 FFT、Hann/Blackman、时域统计、正弦/方波发生器、SPSC ring。
-- macOS CoreAudio 后端：设备枚举、输入采集、输出测试音（2ch float32）。
-- Windows WinMM 后端：设备枚举、输入采集、输出测试音（2ch int16）。
-- ASCII TUI：实时示波器、合成示波器、对数 FFT。
-- CLI：`version`、`devices`、`monitor`、`tone`、`scope`、`fft`、`units`、`safety`、`session`、`calibrate`、`selftest`。
-- 构建：`alpha/Makefile`（macOS + mingw 交叉编译）、`alpha/CMakeLists.txt`、GitHub Actions 双端 CI。
-- 文档：alpha README、Known Issues。
-
-### Changed
-
-- 原 v1.1 保留为 tag `v1.1.0-initial`；alpha 分支不覆盖原实现。
-
-### Security
-
-- 明确“软件不能保护声卡”；SafetyGuard 只做预检、锁存、静音。
+See tag `v0.8.0-alpha.1`.

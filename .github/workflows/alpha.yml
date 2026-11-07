@@ -2,7 +2,7 @@ name: alpha
 
 on:
   push:
-    branches: [ main, alpha/0.1.0, v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, v0.8 ]
+    branches: [ main, alpha/0.1.0, v0.2, v0.3, v0.4, v0.5, v0.6, v0.7, v0.8, v0.9 ]
   pull_request:
 
 jobs:
@@ -17,11 +17,19 @@ jobs:
       - name: Test
         run: ctest --test-dir alpha/build --output-on-failure
       - name: Package
-        run: ditto -c -k --keepParent alpha/build/audioscope-alpha alpha/build/audioscope-alpha-macos.zip
+        run: |
+          set -euo pipefail
+          VERSION="$(cat alpha/VERSION)"
+          ditto -c -k --sequesterRsrc --keepParent \
+            alpha/build/AudioScope.app "AudioScope-${VERSION}-macos-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent \
+            alpha/build/native-shots alpha/build/native-shots.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: audioscope-alpha-macos
-          path: alpha/build/audioscope-alpha-macos.zip
+          name: audioscope-macos
+          path: |
+            AudioScope-*-macos-arm64.zip
+            alpha/build/native-shots.zip
 
   windows:
     runs-on: windows-2022
@@ -30,12 +38,25 @@ jobs:
       - name: Configure
         run: cmake -S alpha -B alpha/build -DAUDIOSCOPE_PLATFORM=windows -G "Visual Studio 17 2022" -A x64
       - name: Build
-        run: cmake --build alpha/build --config Release
+        shell: pwsh
+        run: |
+          cmake --build alpha/build --config Release 2>&1 | Tee-Object build-win.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path build-win.log -Pattern 'error C[0-9]+|error LNK[0-9]+|fatal error' |
+              Select-Object -First 12 | ForEach-Object { "::error::$($_.Line.Trim())" }
+            exit 1
+          }
       - name: Test
         run: ctest --test-dir alpha/build -C Release --output-on-failure
       - name: Package
-        run: Compress-Archive -Path alpha/build/Release/audioscope-alpha.exe -DestinationPath alpha/build/audioscope-alpha-windows.zip
+        shell: pwsh
+        run: |
+          $version = (Get-Content alpha/VERSION -Raw).Trim()
+          New-Item -ItemType Directory -Force stage | Out-Null
+          Copy-Item alpha/build/Release/AudioScope.exe stage/
+          Copy-Item -Path alpha/README.md, alpha/KNOWN-ISSUES.md, alpha/CHANGELOG.md, alpha/VERSION -Destination stage/
+          Compress-Archive -Path stage/* -DestinationPath "AudioScope-$version-windows-x64.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: audioscope-alpha-windows
-          path: alpha/build/audioscope-alpha-windows.zip
+          name: audioscope-windows
+          path: AudioScope-*-windows-x64.zip

@@ -61,6 +61,13 @@ int  as_report_evaluate(AsReport *report);
 int  as_report_write_json(const AsReport *report, const char *path);
 int  as_report_write_html(const AsReport *report, const char *path);
 int  as_report_write_pdf(const AsReport *report, const char *path);
+/* Optional charts: waveform page when wave_n > 1, then spectrum page when
+ * spec_bins > 1 (pages 2 and 3 when both are supplied). Pass NULL/0 to emit
+ * the single-page summary. */
+int  as_report_write_pdf_ex(const AsReport *report,
+                            const float *wave, int wave_n,
+                            const double *spec_db, int spec_bins,
+                            const char *path);
 const char *as_verdict_name(int verdict);
 
 #ifdef __cplusplus

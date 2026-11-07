@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>AudioScope</string>
+    <key>CFBundleIdentifier</key><string>studio.berry.audioscope</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>AudioScope</string>
+    <key>CFBundleDisplayName</key><string>AudioScope by BerryStudio</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.9.0</string>
+    <key>CFBundleVersion</key><string>0.9.0</string>
+    <key>LSMinimumSystemVersion</key><string>12.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>AudioScope needs input access to measure the connected device. Capture is opt-in.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright 2026 BerryStudio. Apache-2.0.</string>
+</dict>
+</plist>

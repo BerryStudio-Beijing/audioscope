@@ -39,10 +39,24 @@ CORE_C := \
 
 APP_CXX := \
 	src/ui/ascii_canvas.cpp \
-	src/app/ui_snapshot.cpp \
-	src/app/live_server.cpp \
 	src/app/alpha_app.cpp \
 	src/app/main.cpp
+
+NATIVE_CXX := \
+	src/app/native_model.cpp \
+	src/ui/native_pages.cpp
+
+NATIVE_C := \
+	src/ui/native_ui.c \
+	src/ui/native_theme.c
+
+NATIVE_MM := \
+	src/platform/macos/native_app.mm \
+	src/platform/macos/native_main.mm
+
+NATIVE_WIN_CXX := \
+	src/app/native_model.cpp \
+	src/platform/win/native_app_win.cpp
 
 TEST_C := tests/test_ring.c
 
@@ -57,22 +71,32 @@ WIN_PLATFORM_C := \
 MAC_C := $(CORE_C) $(MAC_PLATFORM_C)
 WIN_C := $(CORE_C) $(WIN_PLATFORM_C)
 
-MAC_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(MAC_C)) \
+MAC_LIB_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(MAC_C))
+MAC_OBJS := $(MAC_LIB_OBJS) \
             $(patsubst %.cpp,$(BUILD)/mac/%.o,$(APP_CXX))
+NATIVE_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(NATIVE_C)) \
+               $(patsubst %.cpp,$(BUILD)/mac/%.o,$(NATIVE_CXX)) \
+               $(patsubst %.mm,$(BUILD)/mac/%.o,$(NATIVE_MM))
 MAC_TEST_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(TEST_C)) \
                  $(BUILD)/mac/src/core/ring.o
-WIN_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C)) \
+WIN_LIB_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C))
+WIN_OBJS := $(WIN_LIB_OBJS) \
             $(patsubst %.cpp,$(BUILD)/win/%.o,$(APP_CXX))
+NATIVE_WIN_OBJS := $(patsubst %.cpp,$(BUILD)/win/%.o,$(NATIVE_WIN_CXX))
 
 MAC_LDFLAGS := -framework CoreAudio -framework AudioToolbox -framework AudioUnit \
                -framework CoreFoundation -lpthread -lm
-WIN_LDFLAGS := -lwinmm -lws2_32 -static -static-libgcc -static-libstdc++
+NATIVE_LDFLAGS := $(MAC_LDFLAGS) -framework Cocoa -framework CoreGraphics \
+                  -framework CoreText -framework ImageIO -framework UniformTypeIdentifiers
+OBJCFLAGS := -fobjc-arc -std=c++17 -O2 -Wall -Wextra -Isrc -mmacosx-version-min=12.0
+WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
+NATIVE_WIN_LDFLAGS := -mwindows -lwinmm -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 
--include $(MAC_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
+-include $(MAC_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
 
-.PHONY: all mac win ui test clean dist
+.PHONY: all mac app win win-app test clean dist
 
-all: mac
+all: mac app
 
 mac: $(BUILD)/audioscope-alpha
 
@@ -85,6 +109,10 @@ $(BUILD)/mac/%.o: %.c
 $(BUILD)/mac/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(MAC_CXX) $(MAC_CXXFLAGS) -c $< -o $@
+
+$(BUILD)/mac/%.o: %.mm
+	@mkdir -p $(dir $@)
+	$(MAC_CXX) $(OBJCFLAGS) -c $< -o $@
 
 $(BUILD)/win/%.o: %.c
 	@mkdir -p $(dir $@)
@@ -106,20 +134,35 @@ $(BUILD)/audioscope-alpha.exe: $(WIN_OBJS)
 	@mkdir -p $(BUILD)
 	$(WIN_CXX) $(WIN_OBJS) -o $@ $(WIN_LDFLAGS)
 
-ui: mac
-	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui
+win-app: $(BUILD)/AudioScope.exe
 
-test: mac $(BUILD)/audioscope-alpha-ringtest
+$(BUILD)/AudioScope.exe: $(WIN_LIB_OBJS) $(NATIVE_WIN_OBJS)
+	@mkdir -p $(BUILD)
+	$(WIN_CXX) $(WIN_LIB_OBJS) $(NATIVE_WIN_OBJS) -o $@ $(NATIVE_WIN_LDFLAGS)
+
+APP_BUNDLE := $(BUILD)/AudioScope.app
+APP_BIN := $(APP_BUNDLE)/Contents/MacOS/AudioScope
+
+app: $(APP_BIN)
+
+$(APP_BIN): $(MAC_LIB_OBJS) $(NATIVE_OBJS)
+	@mkdir -p $(APP_BUNDLE)/Contents/MacOS $(APP_BUNDLE)/Contents/Resources/fonts
+	$(MAC_CXX) $(MAC_LIB_OBJS) $(NATIVE_OBJS) -o $@ $(NATIVE_LDFLAGS)
+	@cp packaging/macos/Info.plist $(APP_BUNDLE)/Contents/Info.plist
+	@cp assets/fonts/*.otf $(APP_BUNDLE)/Contents/Resources/fonts/
+	@cp assets/fonts/OFL.txt $(APP_BUNDLE)/Contents/Resources/fonts/
+	@printf 'APPL????' > $(APP_BUNDLE)/Contents/PkgInfo
+	@codesign --force --deep --sign - $(APP_BUNDLE) >/dev/null 2>&1 || true
+	@echo "built $(APP_BUNDLE)"
+
+test: mac $(BUILD)/audioscope-alpha-ringtest app
 	./$(BUILD)/audioscope-alpha selftest
 	./$(BUILD)/audioscope-alpha scope > /dev/null
 	./$(BUILD)/audioscope-alpha fft > /dev/null
 	./$(BUILD)/audioscope-alpha-ringtest
-	rm -rf $(BUILD)/ui-test
-	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui-test > /dev/null
-	test -f $(BUILD)/ui-test/index.html
-	grep -q AUDIOSCOPE_DATA $(BUILD)/ui-test/index.html
-	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui-live-test --live --smoke
-	grep -q AUDIOSCOPE_LIVE $(BUILD)/ui-live-test/index.html
+	rm -rf $(BUILD)/native-shots
+	$(APP_BIN) --shot $(BUILD)/native-shots
+	test -f $(BUILD)/native-shots/0_scope.png
 
 dist: mac win
 	rm -rf dist

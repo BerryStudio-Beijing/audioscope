@@ -347,8 +347,259 @@ int as_report_write_html(const AsReport *r, const char *path) {
     return atomic_commit(f, path, tmp);
 }
 
-int as_report_write_pdf(const AsReport *r, const char *path) {
-    if (!r || !path) return AS_ERR_INVALID;
+/* ------------------------------------------------------------------ */
+/* PDF report (optional waveform / spectrum pages)                     */
+/* ------------------------------------------------------------------ */
+
+#define AS_PDF_CHART_MAX_POINTS 1024
+
+static void pdf_footer(AsPdf *p, int page, int total) {
+    char line[96];
+    snprintf(line, sizeof(line), "Page %d of %d", page, total);
+    as_pdf_text(p, 50, 40, 8, line);
+}
+
+static void dbfs_text(char *buf, size_t n, double db) {
+    if (!(db > -199.0)) snprintf(buf, n, "-inf");
+    else snprintf(buf, n, "%.2f", db);
+}
+
+static double wave_sample(const float *wave, int i) {
+    double v = (double)wave[i];
+    if (!(v > -1.0e30 && v < 1.0e30)) return 0.0; /* NaN/Inf -> 0 */
+    return v;
+}
+
+static double wave_peak(const float *wave, int n) {
+    double peak = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double a = fabs(wave_sample(wave, i));
+        if (a > peak) peak = a;
+    }
+    return peak;
+}
+
+static double wave_freq_hz(const float *wave, int n, double rate) {
+    if (!wave || n < 4 || !(rate > 0.0)) return 0.0;
+    int first = -1, last = -1, crossings = 0;
+    for (int i = 1; i < n; ++i) {
+        double prev = wave_sample(wave, i - 1), cur = wave_sample(wave, i);
+        int up = prev <= 0.0 && cur > 0.0;
+        int down = prev >= 0.0 && cur < 0.0;
+        if (up || down) {
+            if (first < 0) first = i;
+            last = i;
+            ++crossings;
+        }
+    }
+    if (crossings < 2 || last <= first) return 0.0;
+    double cycles = (double)(crossings - 1) / 2.0;
+    double span = (double)(last - first) / rate;
+    if (span <= 0.0) return 0.0;
+    return cycles / span;
+}
+
+static double report_freq_hz(const AsReport *r) {
+    if (r && r->channels > 0 && r->ch[0].stats.freq > 0.0) return r->ch[0].stats.freq;
+    return 0.0;
+}
+
+/* Peak-preserving decimation keeps long waveforms readable and the PDF small.
+ * Returns the number of points written (<= cap). */
+static int wave_points(const float *wave, int n, double scale, double mid,
+                       double x0, double x1, double *xs, double *ys, int cap) {
+    if (n <= cap) {
+        for (int i = 0; i < n; ++i) {
+            xs[i] = x0 + (x1 - x0) * (double)i / (double)(n - 1);
+            ys[i] = mid + wave_sample(wave, i) * scale;
+        }
+        return n;
+    }
+    int cols = cap / 2;
+    int out = 0;
+    for (int c = 0; c < cols; ++c) {
+        long long a = (long long)c * n / cols;
+        long long b = (long long)(c + 1) * n / cols;
+        if (b <= a) b = a + 1;
+        if (b > n) b = n;
+        double lo = wave_sample(wave, (int)a), hi = lo;
+        for (long long k = a + 1; k < b; ++k) {
+            double v = wave_sample(wave, (int)k);
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+        }
+        double pos = (double)a + (double)(b - a - 1) * 0.5;
+        double x = x0 + (x1 - x0) * pos / (double)(n - 1);
+        xs[out] = x;
+        ys[out] = mid + hi * scale;
+        ++out;
+        xs[out] = x;
+        ys[out] = mid + lo * scale;
+        ++out;
+    }
+    return out;
+}
+
+static double clamp_db(double db) {
+    if (!(db > -100.0)) return -100.0;
+    if (db > 0.0) return 0.0;
+    return db;
+}
+
+static double spec_x(int bin, int bins, double x0, double x1) {
+    if (bins <= 1) return x0;
+    double t = log10(1.0 + (double)bin) / log10((double)bins);
+    return x0 + (x1 - x0) * t;
+}
+
+/* Max-preserving decimation: log-ish bin layout, at most cap points. */
+static int spec_points(const double *spec_db, int bins, double x0, double x1,
+                       double y0, double y1, double *xs, double *ys, int cap) {
+    int out = 0;
+    if (bins <= cap) {
+        for (int i = 0; i < bins; ++i) {
+            xs[out] = spec_x(i, bins, x0, x1);
+            ys[out] = y0 + (y1 - y0) * (clamp_db(spec_db[i]) + 100.0) / 100.0;
+            ++out;
+        }
+        return out;
+    }
+    for (int c = 0; c < cap; ++c) {
+        long long a = (long long)c * bins / cap;
+        long long b = (long long)(c + 1) * bins / cap;
+        if (b <= a) b = a + 1;
+        if (b > bins) b = bins;
+        double best = clamp_db(spec_db[a]);
+        for (long long k = a + 1; k < b; ++k) {
+            double v = clamp_db(spec_db[k]);
+            if (v > best) best = v;
+        }
+        int center = (int)((a + b - 1) / 2);
+        xs[out] = spec_x(center, bins, x0, x1);
+        ys[out] = y0 + (y1 - y0) * (best + 100.0) / 100.0;
+        ++out;
+    }
+    return out;
+}
+
+static void pdf_draw_wave(AsPdf *p, const AsReport *r, const float *wave, int n,
+                          int page, int total) {
+    double peak = wave_peak(wave, n);
+    double peak_db = peak > 0.0 ? 20.0 * log10(peak) : -200.0;
+    if (peak_db < -200.0) peak_db = -200.0;
+    char pdb[24];
+    dbfs_text(pdb, sizeof(pdb), peak_db);
+    double vpp = (r->channels > 0 && r->ch[0].vpp > 0.0) ? r->ch[0].vpp : 2.0 * peak;
+    double freq = report_freq_hz(r);
+    if (!(freq > 0.0)) freq = wave_freq_hz(wave, n, r->sample_rate);
+
+    char line[256];
+    as_pdf_text(p, 50, 790, 18, "Waveform");
+    if (freq > 0.0)
+        snprintf(line, sizeof(line), "Peak %s dBFS   Vpp %.4f   Freq %.1f Hz",
+                 pdb, vpp, freq);
+    else
+        snprintf(line, sizeof(line), "Peak %s dBFS   Vpp %.4f   Freq n/a",
+                 pdb, vpp);
+    as_pdf_text(p, 50, 766, 9, line);
+
+    const double x0 = 85.0, x1 = 535.0, y0 = 500.0, y1 = 740.0;
+    const double mid = (y0 + y1) * 0.5;
+    const double amp = (y1 - y0) * 0.5;
+
+    as_pdf_gray(p, 205, 0.3);
+    for (int i = 1; i < 8; ++i) {
+        double x = x0 + (x1 - x0) * (double)i / 8.0;
+        as_pdf_line(p, x, y0, x, y1);
+    }
+    for (int i = 1; i < 4; ++i) {
+        double y = y0 + (y1 - y0) * (double)i / 4.0;
+        as_pdf_line(p, x0, y, x1, y);
+    }
+
+    as_pdf_gray(p, 90, 0.8);
+    as_pdf_line(p, x0, y0, x1, y0);
+    as_pdf_line(p, x1, y0, x1, y1);
+    as_pdf_line(p, x1, y1, x0, y1);
+    as_pdf_line(p, x0, y1, x0, y0);
+
+    char v[32];
+    snprintf(v, sizeof(v), "+%.3f", peak);
+    as_pdf_text(p, x0 - 44, y1 - 2, 7, v);
+    as_pdf_text(p, x0 - 44, mid - 2, 7, "0");
+    snprintf(v, sizeof(v), "-%.3f", peak);
+    as_pdf_text(p, x0 - 44, y0 - 2, 7, v);
+    as_pdf_text(p, x0, y0 - 14, 7, "0");
+    int shown = n > AS_PDF_CHART_MAX_POINTS ? AS_PDF_CHART_MAX_POINTS : n;
+    if (shown < n)
+        snprintf(v, sizeof(v), "%d of %d samples", shown, n);
+    else
+        snprintf(v, sizeof(v), "%d samples", n);
+    as_pdf_text(p, x1 - 92, y0 - 14, 7, v);
+
+    double scale = peak > 0.0 ? (amp * 0.9) / peak : 0.0;
+    double xs[AS_PDF_CHART_MAX_POINTS], ys[AS_PDF_CHART_MAX_POINTS];
+    int count = wave_points(wave, shown, scale, mid, x0, x1, xs, ys,
+                            AS_PDF_CHART_MAX_POINTS);
+    as_pdf_polyline(p, xs, ys, count, 45, 0.9);
+    pdf_footer(p, page, total);
+}
+
+static void pdf_draw_spectrum(AsPdf *p, const double *spec_db, int bins,
+                              int page, int total) {
+    char line[256];
+    as_pdf_text(p, 50, 790, 18, "Spectrum");
+    snprintf(line, sizeof(line), "Bins %d   dBFS grid -100..0", bins);
+    as_pdf_text(p, 50, 766, 9, line);
+
+    const double x0 = 85.0, x1 = 535.0, y0 = 500.0, y1 = 740.0;
+
+    as_pdf_gray(p, 205, 0.3);
+    for (int i = 0; i <= 10; ++i) {
+        double y = y0 + (y1 - y0) * (double)i / 10.0;
+        as_pdf_line(p, x0, y, x1, y);
+    }
+    for (int i = 1; i < 8; ++i) {
+        double x = x0 + (x1 - x0) * (double)i / 8.0;
+        as_pdf_line(p, x, y0, x, y1);
+    }
+
+    as_pdf_gray(p, 90, 0.8);
+    as_pdf_line(p, x0, y0, x1, y0);
+    as_pdf_line(p, x1, y0, x1, y1);
+    as_pdf_line(p, x1, y1, x0, y1);
+    as_pdf_line(p, x0, y1, x0, y0);
+
+    char v[32];
+    for (int db = -100; db <= 0; db += 20) {
+        double y = y0 + (y1 - y0) * (double)(db + 100) / 100.0;
+        snprintf(v, sizeof(v), "%d", db);
+        as_pdf_text(p, x0 - 26, y - 2, 7, v);
+    }
+    for (int k = 0; k <= 4; ++k) {
+        double t = (double)k / 4.0;
+        double x = x0 + (x1 - x0) * t;
+        int bin = (int)(pow((double)bins, t) - 1.0 + 0.5);
+        if (bin < 0) bin = 0;
+        if (bin >= bins) bin = bins - 1;
+        snprintf(v, sizeof(v), "%d", bin);
+        as_pdf_text(p, x - 4, y0 - 14, 7, v);
+    }
+
+    double xs[AS_PDF_CHART_MAX_POINTS], ys[AS_PDF_CHART_MAX_POINTS];
+    int count = spec_points(spec_db, bins, x0, x1, y0, y1, xs, ys,
+                            AS_PDF_CHART_MAX_POINTS);
+    as_pdf_polyline(p, xs, ys, count, 45, 0.9);
+    pdf_footer(p, page, total);
+}
+
+int as_report_write_pdf_ex(const AsReport *r, const float *wave, int wave_n,
+                           const double *spec_db, int spec_bins, const char *path) {
+    if (!r || !path || !path[0]) return AS_ERR_INVALID;
+    int wave_page = (wave && wave_n > 1);
+    int spec_page = (spec_db && spec_bins > 1);
+    int total = 1 + wave_page + spec_page;
+
     AsPdf *p = as_pdf_create("AudioScope report");
     if (!p) return AS_ERR_IO;
     char line[256];
@@ -393,8 +644,44 @@ int as_report_write_pdf(const AsReport *r, const char *path) {
                 "Software cannot protect the sound card. Use a protected front end for high voltage.");
     as_pdf_text(p, 50, y - 14, 8,
                 "Canonical report: self-contained HTML. This PDF is a printable summary.");
-    as_pdf_text(p, 50, 60, 8, "AudioScope by BerryStudio 0.7-alpha");
-    int rc = as_pdf_finish(p, path);
+    as_pdf_text(p, 50, 60, 8, AS_BRAND " " AS_VERSION);
+    pdf_footer(p, 1, total);
+
+    if (wave_page) {
+        if (as_pdf_new_page(p) != 0) {
+            as_pdf_destroy(p);
+            return AS_ERR_IO;
+        }
+        pdf_draw_wave(p, r, wave, wave_n, 2, total);
+    }
+    if (spec_page) {
+        if (as_pdf_new_page(p) != 0) {
+            as_pdf_destroy(p);
+            return AS_ERR_IO;
+        }
+        pdf_draw_spectrum(p, spec_db, spec_bins, wave_page ? 3 : 2, total);
+    }
+
+    char tmp[1024];
+    if (strlen(path) + 5 >= sizeof(tmp)) {
+        as_pdf_destroy(p);
+        return AS_ERR_INVALID;
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    int rc = as_pdf_finish(p, tmp);
     as_pdf_destroy(p);
-    return rc == 0 ? AS_OK : AS_ERR_IO;
+    if (rc != 0) {
+        remove(tmp);
+        return AS_ERR_IO;
+    }
+    remove(path);
+    if (rename(tmp, path) != 0) {
+        remove(tmp);
+        return AS_ERR_IO;
+    }
+    return AS_OK;
+}
+
+int as_report_write_pdf(const AsReport *r, const char *path) {
+    return as_report_write_pdf_ex(r, NULL, 0, NULL, 0, path);
 }

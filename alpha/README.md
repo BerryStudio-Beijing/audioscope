@@ -1,101 +1,66 @@
-# AudioScope by BerryStudio — 0.8-alpha (Live Bridge)
+# AudioScope by BerryStudio — 0.9-alpha (Native)
 
-> **AudioScope by BerryStudio** · `0.8.0-alpha.1` · macOS + Windows · C11 core + C++17 app + local Web UI
-> 0.7-alpha 保留在 tag `v0.7.0-alpha.1`；0.6-alpha 保留在 tag `v0.6.0-alpha.1`。
+> **AudioScope by BerryStudio** · `0.9.0-alpha.1` · macOS 12+ arm64 · Windows 10/11 x64
+> C11 core + C++17 app · native AppKit/CoreGraphics + Win32/GDI+ · no Web UI
 
-## 0.8-alpha 新增了什么
+## 0.9-alpha 是什么
 
-0.7 的 Web UI 是**只读快照**：`ui` 生成一次 `AUDIOSCOPE_DATA`，刷新永远是同一份。
-0.8 加了一条**本地实时桥**，仍然零第三方依赖、只监听 `127.0.0.1`：
+0.9 把 0.7/0.8 的 Web 前端全部移除，改成双端**本地原生界面**：
 
-- `audioscope-alpha ui --live` 复制 Web UI 后，自己起一个极小的 HTTP/1.1 + WebSocket 服务，
-  不再需要 `python3 -m http.server`。
-- 浏览器连 `ws://127.0.0.1:<port>/ws`，服务端每 500 ms 推送一次同一个快照对象
-  （波形、频谱、THD/SNR、通道表），页面原地刷新，顶部出现 `LIVE` 状态。
-- 快照生成与静态 `ui` 共用 `ui_snapshot_json()`，不会出现两套字段。
-- 默认数据源是**合成信号**（明确标注 `live · synthetic`），因为采集需要麦克风权限；
-  `--capture` 才打开默认/指定输入，打开失败会回退并打印原因。
-- `--smoke` 在进程内跑一遍 HTTP GET + WebSocket 握手 + 收帧，`make test` / CTest 用它做回归。
+- **macOS**：`AudioScope.app`，AppKit + CoreGraphics + CoreText，内嵌 Geist 字体。
+- **Windows**：`AudioScope.exe` + Inno Setup 安装包，Win32 + GDI+。
+- 七个页面：波形、频谱、相位（XY）、测量、维修、报告、校准。
+- 多页 PDF：摘要 + 波形图 + 频谱图。
+- Loopback：−20 dBFS / 1 kHz 输出→输入，读回电平与 THD（需手动确认）。
+- 采集是显式 opt-in；默认合成数据，界面明确标注。
+- 无 WebView、无 HTTP、无 WebSocket、无遥测。
 
-0.8-alpha.1 仍**不是**完整 0.8：WASAPI、Windows >2ch、真实 DUT 闭环、多页 PDF 还没做。
-
-## 启动 UI
+## 构建
 
 ```bash
 cd alpha
-make mac
 
-# 1) 静态快照（一次性注入）
-./build/audioscope-alpha ui --out build/ui
-python3 -m http.server 8124 --bind 127.0.0.1 --directory build/ui
+# macOS 原生 app + CLI + 测试
+make app          # build/AudioScope.app
+make mac          # build/audioscope-alpha (CLI)
+make test         # 52 项 selftest + ringtest + native --shot 回归
 
-# 2) 实时桥（自带 HTTP 服务，默认合成数据源）
-./build/audioscope-alpha ui --live --port 8125
-# 打开 http://127.0.0.1:8125/
+# 离屏渲染七页（调试/截图）
+./build/AudioScope.app/Contents/MacOS/AudioScope --shot build/shots
 
-# 3) 实时桥 + 真实输入（会触发 macOS 麦克风权限）
-./build/audioscope-alpha ui --live --port 8125 --capture --device 2
-
-# 4) 只跑传输层自检（CI 用）
-./build/audioscope-alpha ui --live --smoke
+# Windows 交叉编译（需要 mingw-w64）
+make win          # CLI 与控制台核心
+# 原生 Windows GUI 由 CI 的 MSVC 构建；本机无 MSVC。
 ```
 
-`Ctrl-C` 停止服务。`--interval MS` 调整推送间隔（最小 100 ms），`--duration SEC` 用于自动退出。
+## 运行
 
-![主界面](web/docs/screens/main.png)
+```bash
+open build/AudioScope.app
+```
 
-![明色主题](web/docs/screens/light.png)
-
-## UI 页面
-
-| 页面 | 内容 |
-|---|---|
-| 波形 | Peak / RMS / 频率 / 波峰因数 / Vpp / clip，主波形 + 触发线 |
-| 频谱 | THD / THD+N / SNR / SINAD / SFDR / ENOB，对数频谱 + 谐波标记 |
-| 相位 | 相位 / 增益 / 极性，XY 密度图 + 拟合椭圆 |
-| 测量 | 8 通道表、限值、判定、未校准电压警告 |
-| 维修 | tape 计划步骤、阈值、PASS/FAIL、PDF/JSON |
-| 报告 | JSON/HTML/PDF 最近报告 |
-| 校准 | profile 字段、置信度、电压不可用提示 |
+- `1–7` 切页，`Space` 保持，`C` 采集，`R` 跑维修计划，`E` 导出报告，`T` 切主题。
+- 采集/回环都会先弹原生确认框；输入模式不会自动切换。
 
 ## 设计基线
 
-- 颜色/材质/排印取 `berrystudio-ui/design-system/berry-tokens.css`，不散落十六进制。
-- 字体：Geist Regular/Medium/Bold + Geist Mono（SIL OFL 1.1，见 `web/NOTICE.md`）。
-- 数字 tabular；负号 U+2212、范围 U+2013、缺失 U+2014。
-- 图表在明色主题下保持深石墨测量面。
-- 快捷键：`1–7` 切页、`Esc` 关闭弹窗、`⌘/Ctrl+E` 导出快照。
-- 主题/弹窗支持深链接：`?theme=light#scope`、`#about`、`#settings`。
+- 颜色/材质/排印取 BerryStudio / MasterLens Precision Instrument token：
+  暖灰石墨、单一鼠尾草绿 accent、琥珀警告、砖红错误；4 px 网格。
+- 暗色为主，明色独立设计；数字等宽；无霓虹/发光。
+- macOS 字体：Geist Regular/Medium/Bold + Geist Mono（SIL OFL 1.1，
+  `assets/fonts/OFL.txt`）。Windows：Microsoft YaHei UI / Consolas。
 
-## 构建与测试
+## 0.9-alpha 的限制
 
-```bash
-cd alpha
-make mac
-make win
-make test     # 47 项 selftest + ringtest + 静态 ui smoke + live bridge smoke
-```
-
-UI 截图（需要 Chrome）：
-
-```bash
-./web/scripts/shoot.sh
-# -> web/docs/screens/*.png (1120×700 @ 2×)
-```
-
-## 0.8-alpha 的限制
-
-- **实时桥默认是合成信号**：`--capture` 才接真实输入；没有实时 DSP 重采样/多设备聚合。
-- **没有原生 GUI**：CoreGraphics/Direct2D 未实现；Web UI 是当前前端。
-- **Windows 仍是 WinMM 2ch**：WASAPI 未实现。Windows 的实时桥代码已交叉编译进 PE，
-  但本轮没有 Windows 真机可验证。
-- **维修计划仍只跑合成验证**：真实 DUT 闭环未接线。
-- **PDF 单页摘要**：无多页/图表/曲线叠加。
-- **没有硬件前端**：软件不能保护声卡。
+- **Windows 仍是 WinMM 2ch**；WASAPI 与 >2ch 未实现。
+- Windows 未在真实音频设备上运行验证（CI 只保证编译/测试/打包）。
+- 二进制未签名；macOS Gatekeeper / Windows SmartScreen 可能提示。
+- 未校准只显示 dBFS；没有校准向导 UI。
+- 没有设备选择 UI，采集/回环使用系统默认设备。
+- Loopback 需要手动接线；不是校准过的 DUT 测量。
+- 没有硬件保护前端：软件不能保护声卡。
 
 ## 后续
 
-- 0.8-alpha 剩余：WASAPI 共享模式 + >2ch、真实 DUT 闭环、多页 PDF/曲线叠加、
-  Windows 真机验证、硬件前端参考设计。
-- 机会清单见 [`KNOWN-ISSUES.md`](KNOWN-ISSUES.md) 的「下一版必须解决」。
-- 路线图见 [`../docs/plan/ROADMAP.md`](../docs/plan/ROADMAP.md)。
+- WASAPI、真机验证、设备选择、游标/缩放、校准向导、签名/公证。
+- 记录见 [`../docs/plan/V0.9.md`](../docs/plan/V0.9.md)。

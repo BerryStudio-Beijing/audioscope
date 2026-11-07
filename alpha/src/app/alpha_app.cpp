@@ -1,8 +1,5 @@
 #include "app/alpha_app.hpp"
 
-#include "app/live_server.hpp"
-#include "app/ui_snapshot.hpp"
-
 #include "core/api.h"
 #include "core/fft.h"
 #include "core/generator.h"
@@ -19,7 +16,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <csignal>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -64,7 +60,7 @@ void enable_ansi() {}
 
 void print_help() {
     std::printf(
-        "%s %s — sound-card audio repair workstation (0.7-alpha)\n"
+        "%s %s — sound-card audio repair workstation (0.9-alpha)\n"
         "\n"
         "Usage:\n"
         "  audioscope-alpha version\n"
@@ -86,9 +82,6 @@ void print_help() {
         "  audioscope-alpha freqsweep [--start HZ --end HZ --points N --csv FILE]\n"
         "  audioscope-alpha templates\n"
         "  audioscope-alpha repair --template quick|pedal|tape|mixer|headphone [--out DIR]\n"
-        "  audioscope-alpha ui [--web-src DIR] [--out DIR]\n"
-        "                       [--live [--port N] [--interval MS] [--capture [--device N]]\n"
-        "                        [--duration SEC] | --smoke]\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -129,9 +122,6 @@ bool has_flag(const std::vector<std::string> &args, const char *key) {
     }
     return false;
 }
-
-volatile std::sig_atomic_t g_live_stop = 0;
-void on_live_sigint(int) { g_live_stop = 1; }
 
 double opt_num(const std::vector<std::string> &args, const char *key, double fallback) {
     std::string v = opt_value(args, key, "");
@@ -576,6 +566,35 @@ int run_self_test() {
     char pdf_head[9] = {0};
     pdf_in.read(pdf_head, 8);
     check(std::string(pdf_head).find("%PDF-1.4") == 0, "report pdf header");
+    std::ifstream pdf_all_in(pdf, std::ios::binary);
+    std::string pdf_text((std::istreambuf_iterator<char>(pdf_all_in)),
+                         std::istreambuf_iterator<char>());
+    check(pdf_text.find("/Count 1") != std::string::npos,
+          "report pdf single page");
+
+    std::vector<float> chart_wave(480);
+    for (int i = 0; i < 480; ++i) {
+        double t = (double)i / kSampleRate;
+        chart_wave[(size_t)i] =
+            (float)(0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t));
+    }
+    std::vector<double> chart_spec(64);
+    for (int i = 0; i < 64; ++i) chart_spec[(size_t)i] = -90.0 + 3.0 * i;
+    std::string pdf_ex = (tmp / "report-ex.pdf").string();
+    check(as_report_write_pdf_ex(&rep, chart_wave.data(), (int)chart_wave.size(),
+                                 chart_spec.data(), (int)chart_spec.size(),
+                                 pdf_ex.c_str()) == AS_OK,
+          "report pdf ex");
+    check(fs::exists(pdf_ex) && fs::file_size(pdf_ex) > 1000,
+          "report pdf ex exists");
+    std::ifstream pdf_ex_in(pdf_ex, std::ios::binary);
+    std::string pdf_ex_text((std::istreambuf_iterator<char>(pdf_ex_in)),
+                            std::istreambuf_iterator<char>());
+    check(pdf_ex_text.find("/Count 3") != std::string::npos,
+          "report pdf ex pages");
+    check(pdf_ex_text.find("Waveform") != std::string::npos &&
+              pdf_ex_text.find("Spectrum") != std::string::npos,
+          "report pdf ex charts");
     std::ifstream in(html);
     std::string html_text((std::istreambuf_iterator<char>(in)),
                           std::istreambuf_iterator<char>());
@@ -2018,7 +2037,7 @@ int cmd_repair(const std::vector<std::string> &args) {
         as_pdf_line(doc, 50, y + 6, 545, y + 6);
         as_pdf_text(doc, 50, y - 8, 8,
                     "Synthetic verification only; live DUT loopback is not wired in 0.6-alpha.");
-        as_pdf_text(doc, 50, 60, 8, "AudioScope by BerryStudio 0.7-alpha");
+        as_pdf_text(doc, 50, 60, 8, AS_BRAND " " AS_VERSION);
         as_pdf_finish(doc, pdf.c_str());
         as_pdf_destroy(doc);
     }
@@ -2032,130 +2051,6 @@ int cmd_repair(const std::vector<std::string> &args) {
 
 
 
-int cmd_ui(const std::vector<std::string> &args) {
-    std::string web_src = opt_value(args, "--web-src", "web");
-    std::string out_dir = opt_value(args, "--out", "build/ui");
-    std::error_code ec;
-    if (!std::filesystem::exists(web_src, ec)) {
-        if (std::filesystem::exists("alpha/web", ec)) web_src = "alpha/web";
-        else {
-            std::fprintf(stderr, "web UI source not found: %s (run from alpha/ or pass --web-src)\n", web_src.c_str());
-            return 1;
-        }
-    }
-    std::filesystem::create_directories(out_dir, ec);
-    for (const auto &entry : std::filesystem::directory_iterator(web_src, ec)) {
-        std::string name = entry.path().filename().string();
-        if (name == "docs" || name == "scripts") continue;
-        std::filesystem::copy(entry.path(), std::filesystem::path(out_dir) / entry.path().filename(),
-                              std::filesystem::copy_options::recursive |
-                              std::filesystem::copy_options::overwrite_existing, ec);
-        if (ec) break;
-    }
-    if (ec) {
-        std::fprintf(stderr, "cannot copy web UI: %s\n", ec.message().c_str());
-        return 1;
-    }
-
-    const bool live = has_flag(args, "--live") || has_flag(args, "--smoke");
-    UiSnapshotData data;
-    data.fs = kSampleRate;
-    data.channels = 2;
-    data.source = live ? "live · synthetic" : "synthetic snapshot";
-    const int n = 8192;
-    data.scope.resize((size_t)720);
-    make_tone_signal(&data.scope, 720, kSampleRate, 1000.0, -6.0, 0.1);
-    std::vector<float> wave((size_t)n);
-    make_tone_signal(&wave, n, kSampleRate, 1000.0, -6.0, 0.1);
-    as_stats_compute(data.scope.data(), (int)data.scope.size(), kSampleRate, &data.stats);
-
-    std::vector<double> x((size_t)n), win((size_t)n), mag((size_t)n / 2 + 1);
-    for (int i = 0; i < n; ++i) x[(size_t)i] = wave[(size_t)i];
-    as_window_hann(win.data(), n);
-    for (int i = 0; i < n; ++i) x[(size_t)i] *= win[(size_t)i];
-    AsFft fft;
-    if (as_fft_init(&fft, n) != 0) {
-        std::fprintf(stderr, "fft init failed\n");
-        return 1;
-    }
-    as_fft_forward(&fft, x.data(), mag.data(), n);
-    ui_spectrum_from_mag(mag.data(), n, kSampleRate, &data.spec_freqs, &data.spec_db);
-    as_tone_analyze(wave.data(), n, kSampleRate, &data.tone);
-    as_fft_free(&fft);
-
-    std::string js = ui_snapshot_json(data);
-    std::string extra = live ? "<script>window.AUDIOSCOPE_LIVE = true;</script>" : "";
-
-    std::string index_path = out_dir + "/index.html";
-    std::ifstream in(index_path);
-    if (!in) {
-        std::fprintf(stderr, "cannot read %s\n", index_path.c_str());
-        return 1;
-    }
-    std::string html((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    std::string marker = "<!--DATA-->";
-    size_t pos = html.find(marker);
-    if (pos == std::string::npos) {
-        std::fprintf(stderr, "UI template missing %s\n", marker.c_str());
-        return 1;
-    }
-    html.replace(pos, marker.size(), extra + "<script>" + js + "</script>");
-    std::ofstream out(index_path, std::ios::binary);
-    out << html;
-    out.close();
-
-    if (!live) {
-        std::printf("UI: %s/index.html\n", out_dir.c_str());
-        std::printf("serve: python3 -m http.server --directory %s 8124\n", out_dir.c_str());
-        return 0;
-    }
-
-    LiveOptions lo;
-    lo.root = out_dir;
-    lo.port = has_flag(args, "--smoke") ? 0 : opt_int(args, "--port", 8124);
-    lo.interval_ms = opt_int(args, "--interval", 500);
-    lo.capture = has_flag(args, "--capture");
-    lo.device = opt_int(args, "--device", -1);
-    if (lo.interval_ms < 100) lo.interval_ms = 100;
-
-    LiveServer server(lo);
-    std::string err;
-    if (!server.start(&err)) {
-        std::fprintf(stderr, "live server: %s\n", err.c_str());
-        return 1;
-    }
-    if (has_flag(args, "--smoke")) {
-        int rc = live_bridge_smoke(server.port(), &err);
-        int port = server.port();
-        server.stop();
-        if (rc != 0) {
-            std::fprintf(stderr, "live bridge smoke: FAIL (%s)\n", err.c_str());
-            return 1;
-        }
-        std::printf("live bridge smoke: ok (loopback port %d, HTTP + WebSocket + snapshot)\n", port);
-        return 0;
-    }
-
-    std::printf("UI (live): http://127.0.0.1:%d/  ·  ws://127.0.0.1:%d/ws every %d ms\n",
-                server.port(), server.port(), lo.interval_ms);
-    std::printf("source: %s  ·  Ctrl-C to stop\n",
-                lo.capture ? "capture (fallback to synthetic on error)" : "synthetic live");
-    std::fflush(stdout);
-
-    g_live_stop = 0;
-    std::signal(SIGINT, on_live_sigint);
-    std::signal(SIGTERM, on_live_sigint);
-    double duration = opt_num(args, "--duration", 0.0);
-    auto deadline = std::chrono::steady_clock::now() +
-                    std::chrono::milliseconds((int)std::lround(duration * 1000.0));
-    while (!g_live_stop) {
-        if (duration > 0.0 && std::chrono::steady_clock::now() >= deadline) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    server.stop();
-    std::printf("live server stopped\n");
-    return 0;
-}
 
 } // namespace
 
@@ -2199,7 +2094,6 @@ int run_alpha_cli(int argc, char **argv) {
     if (cmd == "freqsweep") return cmd_freqsweep(args);
     if (cmd == "templates") return cmd_templates();
     if (cmd == "repair") return cmd_repair(args);
-    if (cmd == "ui") return cmd_ui(args);
     if (cmd == "tone") return cmd_tone(args);
     if (cmd == "session") return cmd_session(args.size() > 2 ? args[2] : "build/session");
     if (cmd == "calibrate") return cmd_calibrate(args);

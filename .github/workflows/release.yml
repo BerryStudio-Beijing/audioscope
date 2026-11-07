@@ -22,15 +22,21 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="$(cat alpha/VERSION)"
-          mkdir -p stage
-          cp alpha/build/audioscope-alpha stage/
-          cp alpha/README.md alpha/KNOWN-ISSUES.md alpha/CHANGELOG.md alpha/VERSION stage/
-          cd stage
-          zip -qry "../AudioScope-${VERSION}-macos-arm64.zip" .
+          APP="alpha/build/AudioScope.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" \
+            "AudioScope-${VERSION}-macos-arm64.zip"
+          rm -rf dmg-stage
+          mkdir -p dmg-stage
+          cp -R "$APP" dmg-stage/
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -quiet -volname "AudioScope ${VERSION}" -srcfolder dmg-stage \
+            -ov -format UDZO "AudioScope-${VERSION}-macos-arm64.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: release-macos
-          path: AudioScope-*-macos-arm64.zip
+          path: |
+            AudioScope-*-macos-arm64.zip
+            AudioScope-*-macos-arm64.dmg
           if-no-files-found: error
 
   windows:
@@ -40,21 +46,41 @@ jobs:
       - name: Configure
         run: cmake -S alpha -B alpha/build -DAUDIOSCOPE_PLATFORM=windows -G "Visual Studio 17 2022" -A x64
       - name: Build
-        run: cmake --build alpha/build --config Release
+        shell: pwsh
+        run: |
+          cmake --build alpha/build --config Release 2>&1 | Tee-Object build-win.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path build-win.log -Pattern 'error C[0-9]+|error LNK[0-9]+|fatal error' |
+              Select-Object -First 12 | ForEach-Object { "::error::$($_.Line.Trim())" }
+            exit 1
+          }
       - name: Test
         run: ctest --test-dir alpha/build -C Release --output-on-failure
-      - name: Package
+      - name: Package portable zip
         shell: pwsh
         run: |
           $version = (Get-Content alpha/VERSION -Raw).Trim()
-          New-Item -ItemType Directory -Force stage | Out-Null
-          Copy-Item alpha/build/Release/audioscope-alpha.exe stage/
-          Copy-Item -Path alpha/README.md, alpha/KNOWN-ISSUES.md, alpha/CHANGELOG.md, alpha/VERSION -Destination stage/
-          Compress-Archive -Path stage/* -DestinationPath "AudioScope-$version-windows-x64.zip"
+          New-Item -ItemType Directory -Force stage/portable | Out-Null
+          Copy-Item alpha/build/Release/AudioScope.exe stage/portable/
+          Copy-Item -Path alpha/README.md, alpha/KNOWN-ISSUES.md, alpha/CHANGELOG.md, alpha/VERSION -Destination stage/portable/
+          Compress-Archive -Path stage/portable/* -DestinationPath "AudioScope-$version-windows-x64.zip"
+      - name: Build installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          New-Item -ItemType Directory -Force stage/installer | Out-Null
+          Copy-Item alpha/build/Release/AudioScope.exe stage/installer/
+          Copy-Item -Path alpha/README.md, alpha/KNOWN-ISSUES.md, alpha/CHANGELOG.md, alpha/VERSION -Destination stage/installer/
+          Copy-Item alpha/packaging/windows/AudioScope.iss stage/installer/
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "stage\installer\AudioScope.iss"
+          Copy-Item "stage\installer\AudioScope-*-windows-x64-setup.exe" .
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: AudioScope-*-windows-x64.zip
+          path: |
+            AudioScope-*-windows-x64.zip
+            AudioScope-*-windows-x64-setup.exe
           if-no-files-found: error
 
   publish:
@@ -67,7 +93,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -85,10 +111,10 @@ jobs:
             ARGS+=(--prerelease)
           fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
             if [[ "$TAG" == *alpha* ]]; then
               gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
             fi
           else
-            gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt "${ARGS[@]}"
+            gh release create "$TAG" dist/* "${ARGS[@]}"
           fi
