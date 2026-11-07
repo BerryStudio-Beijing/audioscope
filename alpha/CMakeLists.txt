@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.7.0 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -85,10 +85,16 @@ add_library(audioscope_ui STATIC src/ui/ascii_canvas.cpp)
 target_include_directories(audioscope_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(audioscope_ui PUBLIC audioscope_core)
 
-add_library(audioscope_app STATIC src/app/alpha_app.cpp)
+add_library(audioscope_app STATIC
+    src/app/ui_snapshot.cpp
+    src/app/live_server.cpp
+    src/app/alpha_app.cpp)
 target_include_directories(audioscope_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(audioscope_app PUBLIC
     audioscope_core audioscope_platform audioscope_ui)
+if(WIN32)
+    target_link_libraries(audioscope_app PUBLIC ws2_32)
+endif()
 
 add_executable(audioscope-alpha src/app/main.cpp)
 target_link_libraries(audioscope-alpha PRIVATE audioscope_app)
@@ -109,3 +115,6 @@ add_test(NAME alpha_fft COMMAND audioscope-alpha fft)
 add_test(NAME alpha_ui COMMAND audioscope-alpha ui
          --web-src "${CMAKE_CURRENT_SOURCE_DIR}/web"
          --out "${CMAKE_CURRENT_BINARY_DIR}/ui-test")
+add_test(NAME alpha_ui_live COMMAND audioscope-alpha ui
+         --web-src "${CMAKE_CURRENT_SOURCE_DIR}/web"
+         --out "${CMAKE_CURRENT_BINARY_DIR}/ui-live-test" --live --smoke)

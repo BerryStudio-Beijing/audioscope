@@ -1,5 +1,8 @@
 #include "app/alpha_app.hpp"
 
+#include "app/live_server.hpp"
+#include "app/ui_snapshot.hpp"
+
 #include "core/api.h"
 #include "core/fft.h"
 #include "core/generator.h"
@@ -16,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <csignal>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -83,6 +87,8 @@ void print_help() {
         "  audioscope-alpha templates\n"
         "  audioscope-alpha repair --template quick|pedal|tape|mixer|headphone [--out DIR]\n"
         "  audioscope-alpha ui [--web-src DIR] [--out DIR]\n"
+        "                       [--live [--port N] [--interval MS] [--capture [--device N]]\n"
+        "                        [--duration SEC] | --smoke]\n"
         "  audioscope-alpha tone [hz] [amp] [sec] [--allow-loud]\n"
         "  audioscope-alpha scope\n"
         "  audioscope-alpha fft\n"
@@ -123,6 +129,9 @@ bool has_flag(const std::vector<std::string> &args, const char *key) {
     }
     return false;
 }
+
+volatile std::sig_atomic_t g_live_stop = 0;
+void on_live_sigint(int) { g_live_stop = 1; }
 
 double opt_num(const std::vector<std::string> &args, const char *key, double fallback) {
     std::string v = opt_value(args, key, "");
@@ -2047,18 +2056,18 @@ int cmd_ui(const std::vector<std::string> &args) {
         std::fprintf(stderr, "cannot copy web UI: %s\n", ec.message().c_str());
         return 1;
     }
-    if (has_flag(args, "--live"))
-        std::fprintf(stderr, "live UI snapshot is not wired yet; using synthetic data.\n");
 
-    const double fs = kSampleRate;
+    const bool live = has_flag(args, "--live") || has_flag(args, "--smoke");
+    UiSnapshotData data;
+    data.fs = kSampleRate;
+    data.channels = 2;
+    data.source = live ? "live · synthetic" : "synthetic snapshot";
     const int n = 8192;
-    const int scope_n = 720;
-    std::vector<float> scope_wave((size_t)scope_n);
-    make_tone_signal(&scope_wave, scope_n, fs, 1000.0, -6.0, 0.1);
+    data.scope.resize((size_t)720);
+    make_tone_signal(&data.scope, 720, kSampleRate, 1000.0, -6.0, 0.1);
     std::vector<float> wave((size_t)n);
-    make_tone_signal(&wave, n, fs, 1000.0, -6.0, 0.1);
-    AsStats st;
-    as_stats_compute(scope_wave.data(), scope_n, fs, &st);
+    make_tone_signal(&wave, n, kSampleRate, 1000.0, -6.0, 0.1);
+    as_stats_compute(data.scope.data(), (int)data.scope.size(), kSampleRate, &data.stats);
 
     std::vector<double> x((size_t)n), win((size_t)n), mag((size_t)n / 2 + 1);
     for (int i = 0; i < n; ++i) x[(size_t)i] = wave[(size_t)i];
@@ -2070,97 +2079,12 @@ int cmd_ui(const std::vector<std::string> &args) {
         return 1;
     }
     as_fft_forward(&fft, x.data(), mag.data(), n);
-    double maxmag = 1e-12;
-    for (int i = 1; i < n / 2; ++i) maxmag = std::max(maxmag, mag[(size_t)i]);
-    AsToneResult thd;
-    as_tone_analyze(wave.data(), n, fs, &thd);
+    ui_spectrum_from_mag(mag.data(), n, kSampleRate, &data.spec_freqs, &data.spec_db);
+    as_tone_analyze(wave.data(), n, kSampleRate, &data.tone);
+    as_fft_free(&fft);
 
-    std::ostringstream js;
-    js << "window.AUDIOSCOPE_DATA = {\n";
-    std::time_t now = std::time(nullptr);
-    char stamp[32];
-    std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M", std::localtime(&now));
-    js << "  meta: {version:\"0.7.0-alpha.1\", platform:\"macOS · CoreAudio\", mode:\"Inst\","
-       << " device:\"Studio 1824c\", rate:48000, channels:2, source:\"synthetic snapshot\","
-       << " timestamp:\"" << stamp << "\"},\n";
-    js << "  scope: {waveform:[";
-    for (int i = 0; i < scope_n; ++i) {
-        if (i) js << ",";
-        js << std::fixed << std::setprecision(5) << scope_wave[(size_t)i];
-    }
-    js << "], peak_dbfs:" << std::setprecision(2) << as_linear_to_db(st.peak)
-       << ", rms_dbfs:" << as_linear_to_db(st.rms)
-       << ", freq_hz:" << std::setprecision(1) << st.freq
-       << ", crest:" << std::setprecision(2) << 20.0 * std::log10(std::max(crest_factor(st), 1e-6))
-       << ", vpp:" << std::setprecision(4) << 2.0 * st.peak
-       << ", clip:0, channel:0},\n";
-    js << "  spectrum: {freqs:[";
-    const int bins = 220;
-    for (int i = 0; i < bins; ++i) {
-        double f = 20.0 * std::pow(1000.0, (double)i / (double)(bins - 1));
-        if (i) js << ",";
-        js << std::setprecision(1) << f;
-    }
-    js << "], db:[";
-    for (int i = 0; i < bins; ++i) {
-        double f = 20.0 * std::pow(1000.0, (double)i / (double)(bins - 1));
-        int bin = (int)std::lround(f * n / fs);
-        if (bin < 1) bin = 1;
-        if (bin > n / 2 - 1) bin = n / 2 - 1;
-        double db = 20.0 * std::log10(std::max(mag[(size_t)bin] / maxmag, 1e-6));
-        if (db < -100.0) db = -100.0;
-        if (i) js << ",";
-        js << std::setprecision(1) << db;
-    }
-    js << "], thd:" << std::setprecision(4) << thd.thd_pct
-       << ", thdn:" << thd.thdn_pct
-       << ", snr:" << std::setprecision(2) << thd.snr_db
-       << ", sinad:" << thd.sinad_db
-       << ", sfdr:" << thd.sfdr_db
-       << ", enob:" << std::setprecision(2) << thd.enob << "},\n";
-
-    js << "  xy: {points:[";
-    for (int i = 0; i < 1600; ++i) {
-        double t = (double)i / fs;
-        double g = std::pow(10.0, 3.0 / 20.0);
-        double a = 0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t);
-        double b = 0.5 * g * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * t + 45.0 * 3.14159265358979323846 / 180.0);
-        if (i) js << ",";
-        js << "[" << std::setprecision(5) << a << "," << b << "]";
-    }
-    js << "], phase_deg:45.0, gain_db:3.0, freq_hz:1000.0, drift_ppm:0},\n";
-
-    js << "  channels:[\n";
-    for (int c = 0; c < 8; ++c) {
-        double peak = (c < 2) ? as_linear_to_db(st.peak) - (c ? 0.2 : 0.0) : -96.0 + c * 0.1;
-        double rms = (c < 2) ? as_linear_to_db(st.rms) - (c ? 0.2 : 0.0) : -102.0 + c * 0.1;
-        js << "    {label:\"CH" << (c + 1) << "\", peak_dbfs:" << std::setprecision(1) << peak
-           << ", rms_dbfs:" << rms << ", freq_hz:" << (c < 2 ? 1000 : 0)
-           << ", vpp:" << std::setprecision(4) << (c < 2 ? 1.0 - c * 0.02 : 0.0)
-           << ", clip:0, verdict:\"" << (c < 2 ? "PASS" : "—") << "\"}"
-           << (c < 7 ? "," : "") << "\n";
-    }
-    js << "  ],\n";
-
-    double wow = 0.0, flutter = 0.0, azimuth = 0.0, plan_thd = 0.0;
-    synth_wow(&wow, &flutter);
-    synth_azimuth(&azimuth);
-    synth_thd(&plan_thd);
-    js << "  repair:{template:\"tape\", label:\"Tape deck\", verdict:\"PASS\", steps:[\n";
-    js << "    {label:\"Wow\", value:" << std::setprecision(4) << wow << ", unit:\"% RMS\", pass:true},\n";
-    js << "    {label:\"Flutter\", value:" << flutter << ", unit:\"% RMS\", pass:true},\n";
-    js << "    {label:\"Azimuth\", value:" << std::setprecision(2) << azimuth << ", unit:\"deg\", pass:true},\n";
-    js << "    {label:\"THD\", value:" << std::setprecision(4) << plan_thd << ", unit:\"%\", pass:true}\n";
-    js << "  ]},\n";
-
-    js << "  reports:[\n"
-       << "    {name:\"repair-tape.pdf\", kind:\"维修计划\", verdict:\"PASS\", time:\"13:57\"},\n"
-       << "    {name:\"run-20261107-043914.pdf\", kind:\"测量报告\", verdict:\"WARN\", time:\"04:39\"},\n"
-       << "    {name:\"run-20261107-043823.pdf\", kind:\"测量报告\", verdict:\"WARN\", time:\"04:38\"}\n"
-       << "  ],\n";
-    js << "  calibration:{id:\"none\", confidence:\"ASSUMED\", fs_vrms:0.0,"
-       << " note:\"未校准：只显示 dBFS；电压需要 measured / datasheet / assumed。\"}\n";
-    js << "};\n";
+    std::string js = ui_snapshot_json(data);
+    std::string extra = live ? "<script>window.AUDIOSCOPE_LIVE = true;</script>" : "";
 
     std::string index_path = out_dir + "/index.html";
     std::ifstream in(index_path);
@@ -2175,16 +2099,63 @@ int cmd_ui(const std::vector<std::string> &args) {
         std::fprintf(stderr, "UI template missing %s\n", marker.c_str());
         return 1;
     }
-    html.replace(pos, marker.size(), "<script>" + js.str() + "</script>");
+    html.replace(pos, marker.size(), extra + "<script>" + js + "</script>");
     std::ofstream out(index_path, std::ios::binary);
     out << html;
     out.close();
-    as_fft_free(&fft);
-    std::printf("UI: %s/index.html\n", out_dir.c_str());
-    std::printf("serve: python3 -m http.server --directory %s 8124\n", out_dir.c_str());
+
+    if (!live) {
+        std::printf("UI: %s/index.html\n", out_dir.c_str());
+        std::printf("serve: python3 -m http.server --directory %s 8124\n", out_dir.c_str());
+        return 0;
+    }
+
+    LiveOptions lo;
+    lo.root = out_dir;
+    lo.port = has_flag(args, "--smoke") ? 0 : opt_int(args, "--port", 8124);
+    lo.interval_ms = opt_int(args, "--interval", 500);
+    lo.capture = has_flag(args, "--capture");
+    lo.device = opt_int(args, "--device", -1);
+    if (lo.interval_ms < 100) lo.interval_ms = 100;
+
+    LiveServer server(lo);
+    std::string err;
+    if (!server.start(&err)) {
+        std::fprintf(stderr, "live server: %s\n", err.c_str());
+        return 1;
+    }
+    if (has_flag(args, "--smoke")) {
+        int rc = live_bridge_smoke(server.port(), &err);
+        int port = server.port();
+        server.stop();
+        if (rc != 0) {
+            std::fprintf(stderr, "live bridge smoke: FAIL (%s)\n", err.c_str());
+            return 1;
+        }
+        std::printf("live bridge smoke: ok (loopback port %d, HTTP + WebSocket + snapshot)\n", port);
+        return 0;
+    }
+
+    std::printf("UI (live): http://127.0.0.1:%d/  ·  ws://127.0.0.1:%d/ws every %d ms\n",
+                server.port(), server.port(), lo.interval_ms);
+    std::printf("source: %s  ·  Ctrl-C to stop\n",
+                lo.capture ? "capture (fallback to synthetic on error)" : "synthetic live");
+    std::fflush(stdout);
+
+    g_live_stop = 0;
+    std::signal(SIGINT, on_live_sigint);
+    std::signal(SIGTERM, on_live_sigint);
+    double duration = opt_num(args, "--duration", 0.0);
+    auto deadline = std::chrono::steady_clock::now() +
+                    std::chrono::milliseconds((int)std::lround(duration * 1000.0));
+    while (!g_live_stop) {
+        if (duration > 0.0 && std::chrono::steady_clock::now() >= deadline) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    server.stop();
+    std::printf("live server stopped\n");
     return 0;
 }
-
 
 } // namespace
 

@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio — 0.7-alpha UI shell.
+/* AudioScope by BerryStudio — 0.8-alpha UI shell.
    Vanilla JS. Data is injected by `audioscope-alpha ui`; otherwise a
    deterministic synthetic snapshot is used so the UI can be reviewed offline. */
 (function () {
@@ -54,7 +54,7 @@
 
   const FALLBACK = {
     meta: {
-      version: '0.7.0-alpha.1',
+      version: '0.8.0-alpha.1',
       platform: 'macOS · CoreAudio',
       mode: 'Inst',
       device: 'Studio 1824c',
@@ -151,6 +151,7 @@
     tab: TABS.some((t) => t.id === hash) ? hash : 'scope',
     theme: query.get('theme') || document.documentElement.getAttribute('data-theme') || 'dark',
     held: false,
+    live: 'off',
     spectrumMode: 'log',
     persistence: '2 s',
     modal: null
@@ -158,6 +159,17 @@
   document.documentElement.setAttribute('data-theme', state.theme === 'light' ? 'light' : 'dark');
 
   /* --------------------------------------------------------------- header */
+  function shortVersion() {
+    const m = (DATA.meta.version || '0.8').match(/^(\d+)\.(\d+)/);
+    return m ? m[1] + '.' + m[2] + '-alpha' : String(DATA.meta.version || '0.8');
+  }
+
+  function livePill() {
+    const label = state.live === 'on' ? 'LIVE' : state.live === 'connecting' ? '连接中' : '离线';
+    return '<span class="live-pill ' + state.live + '" role="status">' +
+      '<span class="dot"></span>' + label + '</span>';
+  }
+
   function renderHeader() {
     const m = DATA.meta;
     $('#topbar').innerHTML =
@@ -166,6 +178,7 @@
         '<div class="brand-sub">BERRYSTUDIO / ' + esc(m.version) + '</div></div>' +
       '</div>' +
       '<div class="top-actions">' +
+        (window.AUDIOSCOPE_LIVE ? livePill() : '') +
         '<button class="btn ghost" data-action="theme">' + (state.theme === 'dark' ? '深色' : '浅色') + '</button>' +
         '<button class="btn ghost" data-modal="about">关于</button>' +
         '<button class="btn ghost" data-modal="settings">设置</button>' +
@@ -401,10 +414,12 @@
   /* ---------------------------------------------------------------- footer */
   function renderFooter() {
     const m = DATA.meta;
+    const live = window.AUDIOSCOPE_LIVE;
+    const src = live && state.live !== 'on' ? 'link down · ' + esc(m.source) : esc(m.source);
     $('#footer').innerHTML =
       '<span>' + (m.rate / 1000).toFixed(1) + ' kHz · stereo · ' + (m.channels || 2) + ' ch</span>' +
       '<span class="mid">BERRYSTUDIO</span>' +
-      '<span class="right"><span><span class="dot"></span>' + esc(m.source) + '</span><span>0.7-alpha</span></span>';
+      '<span class="right"><span><span class="dot ' + (live && state.live !== 'on' ? 'warn' : '') + '"></span>' + src + '</span><span>' + shortVersion() + '</span></span>';
   }
 
   /* ---------------------------------------------------------------- charts */
@@ -754,6 +769,52 @@
     document.documentElement.style.setProperty('--scale', scale.toFixed(4));
   }
 
+  /* ------------------------------------------------------------------ live */
+  function applyLive(m) {
+    if (m.meta) DATA.meta = Object.assign(DATA.meta || {}, m.meta);
+    if (m.scope) DATA.scope = m.scope;
+    if (m.spectrum) DATA.spectrum = m.spectrum;
+    if (m.xy) DATA.xy = m.xy;
+    if (m.channels) DATA.channels = m.channels;
+    if (m.repair) DATA.repair = m.repair;
+  }
+  function repaintLive() {
+    renderReadout();
+    renderDetail();
+    renderFooter();
+    drawCharts();
+  }
+  function connectLive() {
+    let ws = null;
+    let retries = 0;
+    const url = 'ws://' + location.host + '/ws';
+    function schedule() {
+      const wait = Math.min(8000, 500 * Math.pow(2, retries++));
+      setTimeout(open, wait);
+    }
+    function open() {
+      state.live = 'connecting';
+      renderHeader();
+      try { ws = new WebSocket(url); } catch (e) { state.live = 'off'; renderHeader(); schedule(); return; }
+      ws.onopen = () => { state.live = 'on'; retries = 0; renderHeader(); renderFooter(); };
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (state.held) return;
+        applyLive(msg);
+        repaintLive();
+      };
+      ws.onclose = () => {
+        state.live = 'off';
+        renderHeader();
+        renderFooter();
+        schedule();
+      };
+      ws.onerror = () => { if (ws) ws.close(); };
+    }
+    open();
+  }
+
   /* ----------------------------------------------------------------- boot */
   renderHeader();
   renderRail();
@@ -764,4 +825,5 @@
   applyScale();
   requestAnimationFrame(drawCharts);
   if (initialModal) requestAnimationFrame(() => openModal(initialModal));
+  if (window.AUDIOSCOPE_LIVE) connectLive();
 })();

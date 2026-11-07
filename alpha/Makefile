@@ -1,4 +1,4 @@
-# AudioScope by BerryStudio 0.3-alpha — macOS build + Windows cross-build.
+# AudioScope by BerryStudio 0.8-alpha — macOS build + Windows cross-build.
 #
 # macOS:  make mac   -> build/audioscope-alpha
 # Windows: make win  -> build/audioscope-alpha.exe (mingw-w64, WinMM)
@@ -39,6 +39,8 @@ CORE_C := \
 
 APP_CXX := \
 	src/ui/ascii_canvas.cpp \
+	src/app/ui_snapshot.cpp \
+	src/app/live_server.cpp \
 	src/app/alpha_app.cpp \
 	src/app/main.cpp
 
@@ -64,7 +66,7 @@ WIN_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C)) \
 
 MAC_LDFLAGS := -framework CoreAudio -framework AudioToolbox -framework AudioUnit \
                -framework CoreFoundation -lpthread -lm
-WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
+WIN_LDFLAGS := -lwinmm -lws2_32 -static -static-libgcc -static-libstdc++
 
 -include $(MAC_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
 
@@ -116,6 +118,8 @@ test: mac $(BUILD)/audioscope-alpha-ringtest
 	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui-test > /dev/null
 	test -f $(BUILD)/ui-test/index.html
 	grep -q AUDIOSCOPE_DATA $(BUILD)/ui-test/index.html
+	./$(BUILD)/audioscope-alpha ui --out $(BUILD)/ui-live-test --live --smoke
+	grep -q AUDIOSCOPE_LIVE $(BUILD)/ui-live-test/index.html
 
 dist: mac win
 	rm -rf dist
@@ -124,8 +128,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.7.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.7.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-0.8.0-alpha.1-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-0.8.0-alpha.1-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

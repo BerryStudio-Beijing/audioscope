@@ -398,3 +398,19 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* live bridge status (0.8-alpha) */
+.live-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  margin-right: 8px; padding: 3px 9px; border: 1px solid var(--line);
+  border-radius: 999px; font-family: var(--font-mono); font-size: 10px; font-weight: 500; line-height: 1;
+  letter-spacing: .08em; color: var(--text-dim);
+}
+.live-pill .dot { margin-right: 0; }
+.live-pill.on { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.live-pill.connecting { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.live-pill.off { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.live-pill.on .dot { background: var(--good); }
+.live-pill.connecting .dot { background: var(--warn); }
+.live-pill.off .dot { background: var(--bad); }
+.dot.warn { background: var(--warn); }
