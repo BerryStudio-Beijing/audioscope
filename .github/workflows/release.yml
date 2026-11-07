@@ -73,7 +73,12 @@ jobs:
           Copy-Item -Path alpha/README.md, alpha/KNOWN-ISSUES.md, alpha/CHANGELOG.md, alpha/VERSION -Destination stage/installer/
           Copy-Item alpha/packaging/windows/AudioScope.iss stage/installer/
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $iscc "stage\installer\AudioScope.iss"
+          & $iscc "stage\installer\AudioScope.iss" 2>&1 | Tee-Object iscc.log
+          if ($LASTEXITCODE -ne 0) {
+            Select-String -Path iscc.log -Pattern 'Error|error|Compile aborted' |
+              Select-Object -First 12 | ForEach-Object { "::error::$($_.Line.Trim())" }
+            exit 1
+          }
           Copy-Item "stage\installer\AudioScope-*-windows-x64-setup.exe" .
       - uses: actions/upload-artifact@v4
         with:
