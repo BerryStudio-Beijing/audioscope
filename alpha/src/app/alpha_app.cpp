@@ -532,6 +532,106 @@ int run_self_test() {
         if (v > spec_best) { spec_best = v; spec_row = row; }
     }
     check(spec_best > -10.0f && spec_row >= 11 && spec_row <= 15, "spectrogram 1 kHz");
+
+    /* ---- signal generator: 9 种波形（0.9.3） ---- */
+    {
+        check(std::strcmp(as_wave_id(AS_WAVE_LOG_SWEEP), "logsweep") == 0 &&
+                  as_wave_parse("pink") == AS_WAVE_PINK &&
+                  as_wave_parse("bogus") == AS_WAVE_SINE &&
+                  as_wave_is_periodic_pulse(AS_WAVE_IMPULSE),
+              "wave id/parse");
+
+        std::vector<float> gbuf(4800);
+        std::vector<float> gbuf2(4800);
+        AsGenerator gen;
+        AsGenConfig cfg{};
+        cfg.amp = 0.5;
+        cfg.freq_hz = 1000.0;
+        cfg.freq_end_hz = 20000.0;
+        cfg.period_s = 1.0;
+
+        auto rms_of = [](const std::vector<float> &v) {
+            double s = 0.0;
+            for (float x : v) s += (double)x * x;
+            return std::sqrt(s / (double)v.size());
+        };
+        auto peak_of = [](const std::vector<float> &v) {
+            double p = 0.0;
+            for (float x : v) p = std::max(p, (double)std::fabs(x));
+            return p;
+        };
+        auto zero_cross = [](const std::vector<float> &v, int a, int n) {
+            int c = 0;
+            for (int i = a + 1; i < a + n; ++i)
+                if ((v[(size_t)i - 1] < 0.0f) != (v[(size_t)i] < 0.0f)) ++c;
+            return c;
+        };
+
+        cfg.wave = AS_WAVE_SINE;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(std::fabs(rms_of(gbuf) - 0.35355) < 0.01, "gen sine rms");
+
+        cfg.wave = AS_WAVE_TRIANGLE;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(std::fabs(rms_of(gbuf) - 0.28868) < 0.02, "gen triangle rms");
+
+        cfg.wave = AS_WAVE_SAW;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(std::fabs(rms_of(gbuf) - 0.28868) < 0.03, "gen saw rms");
+
+        cfg.wave = AS_WAVE_SQUARE;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(peak_of(gbuf) <= 0.55 && rms_of(gbuf) > 0.45,
+              "gen square peak/rms");
+
+        cfg.wave = AS_WAVE_WHITE;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        const double white_rms = rms_of(gbuf);
+        check(white_rms > 0.2 && white_rms < 0.35, "gen white rms");
+
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf2.data(), (int)gbuf2.size());
+        check(gbuf == gbuf2, "gen noise deterministic");
+
+        cfg.wave = AS_WAVE_PINK;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(rms_of(gbuf) > 0.03 && rms_of(gbuf) < 0.4, "gen pink rms");
+
+        /* 单位脉冲：10 ms 周期 → 4800 样本里恰好 10 个脉冲 */
+        cfg.wave = AS_WAVE_IMPULSE;
+        cfg.period_s = 0.01;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        int hits = 0;
+        for (float x : gbuf)
+            if (std::fabs(x) > 0.4f) ++hits;
+        check(hits == 10, "gen impulse count");
+
+        /* 阶跃：前半周期 0，后半周期 +amp */
+        cfg.wave = AS_WAVE_STEP;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(std::fabs(gbuf[0]) < 1e-6f &&
+                  std::fabs(gbuf[400] - 0.5f) < 1e-6f,
+              "gen step shape");
+
+        /* 对数扫频：0.1 s 扫完 100 Hz → 16 kHz，末尾过零密度显著更高 */
+        cfg.wave = AS_WAVE_LOG_SWEEP;
+        cfg.freq_hz = 100.0;
+        cfg.freq_end_hz = 16000.0;
+        cfg.period_s = 0.1;
+        as_generator_init(&gen, kSampleRate);
+        as_gen_render(&gen, &cfg, gbuf.data(), (int)gbuf.size());
+        check(zero_cross(gbuf, 4200, 600) > zero_cross(gbuf, 0, 600) * 3,
+              "gen log sweep rises");
+    }
+
     as_fft_free(&sfft);
     as_spectrogram_free(&spec);
 

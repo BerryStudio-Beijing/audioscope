@@ -5,6 +5,7 @@
  */
 #include "platform/audio_backend.h"
 #include "core/api.h"
+#include "core/generator.h"
 #include "core/ring.h"
 
 #include <windows.h>
@@ -49,9 +50,16 @@ struct AsAudio {
     int block;
     int running;
     AsAtomicInt tone_on;
+    AsAtomicInt wave;
     AsAtomicU64 freq_bits;
+    AsAtomicU64 freq_end_bits;
     AsAtomicU64 amp_bits;
-    double phase;
+    AsAtomicU64 period_bits;
+    AsGenerator gen;
+    float scratch[AS_WIN_BLOCK];
+    int fade;      /* 启动淡入已输出样本数（仅音频线程访问） */
+    int fade_len;  /* 200 ms */
+    int prev_on;
 };
 
 static char g_error[256];
@@ -94,16 +102,25 @@ static void CALLBACK in_callback(HWAVEIN h, UINT msg, DWORD_PTR user,
 }
 
 static void fill_output(AsAudio *a, short *dst, int frames) {
-    int on = as_atomic_load_int(&a->tone_on);
-    double freq = bits_double(as_atomic_load_u64(&a->freq_bits));
-    double amp = bits_double(as_atomic_load_u64(&a->amp_bits));
-    double step = on ? 2.0 * AS_PI * freq / a->fs : 0.0;
+    const int on = as_atomic_load_int(&a->tone_on);
+    if (on && !a->prev_on) a->fade = 0;
+    if (!on) a->fade = 0;
+    a->prev_on = on;
+    if (on) {
+        AsGenConfig cfg;
+        cfg.wave = as_atomic_load_int(&a->wave);
+        cfg.freq_hz = bits_double(as_atomic_load_u64(&a->freq_bits));
+        cfg.freq_end_hz = bits_double(as_atomic_load_u64(&a->freq_end_bits));
+        cfg.amp = bits_double(as_atomic_load_u64(&a->amp_bits));
+        cfg.period_s = bits_double(as_atomic_load_u64(&a->period_bits));
+        as_gen_render(&a->gen, &cfg, a->scratch, frames);
+    }
     for (int i = 0; i < frames; ++i) {
-        double v = 0.0;
-        if (on) {
-            v = amp * sin(a->phase);
-            a->phase += step;
-            if (a->phase >= 2.0 * AS_PI) a->phase -= 2.0 * AS_PI;
+        double v = on ? (double)a->scratch[i] : 0.0;
+        /* 启动 200 ms 淡入：输出设备刚打开时不硬切到满电平。 */
+        if (on && a->fade < a->fade_len) {
+            ++a->fade;
+            v *= (double)a->fade / (double)a->fade_len;
         }
         short s = (short)(v * 32767.0);
         dst[2 * i] = s;
@@ -140,13 +157,24 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     a->block = block > 0 ? block : AS_WIN_BLOCK;
 #if defined(_MSC_VER)
     a->tone_on = 0;
+    a->wave = AS_WAVE_SINE;
     a->freq_bits = (LONG64)double_bits(1000.0);
+    a->freq_end_bits = (LONG64)double_bits(20000.0);
     a->amp_bits = (LONG64)double_bits(0.1);
+    a->period_bits = (LONG64)double_bits(1.0);
 #else
     atomic_init(&a->tone_on, 0);
+    atomic_init(&a->wave, AS_WAVE_SINE);
     atomic_init(&a->freq_bits, double_bits(1000.0));
+    atomic_init(&a->freq_end_bits, double_bits(20000.0));
     atomic_init(&a->amp_bits, double_bits(0.1));
+    atomic_init(&a->period_bits, double_bits(1.0));
 #endif
+    as_generator_init(&a->gen, a->fs);
+    a->fade = 0;
+    a->fade_len = (int)(a->fs * 0.2);
+    if (a->fade_len < 1) a->fade_len = 1;
+    a->prev_on = 0;
     if (as_ring_init(&a->ring, (uint32_t)(fs * 4.0), 2) != 0) {
         set_error("ring allocation failed");
         free(a);
@@ -162,8 +190,19 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     fmt.nBlockAlign = (WORD)(fmt.nChannels * fmt.wBitsPerSample / 8);
     fmt.nAvgBytesPerSec = fmt.nSamplesPerSec * fmt.nBlockAlign;
 
-    UINT in_id = in_index < 0 ? WAVE_MAPPER : (UINT)in_index;
-    UINT out_id = out_index < 0 ? WAVE_MAPPER : (UINT)out_index;
+    UINT in_id = WAVE_MAPPER;
+    UINT out_id = WAVE_MAPPER;
+    /* 列表下标 ≠ WinMM 设备 ID：输入和输出各有独立编号，必须按 id 解析。 */
+    AsDeviceInfo devs[64];
+    const int ndev = as_platform_list_devices(devs, 64);
+    if (in_index >= 0 && in_index < ndev && devs[in_index].is_input &&
+        strncmp(devs[in_index].id, "in", 2) == 0) {
+        in_id = (UINT)strtoul(devs[in_index].id + 2, NULL, 10);
+    }
+    if (out_index >= 0 && out_index < ndev && devs[out_index].is_output &&
+        strncmp(devs[out_index].id, "out", 3) == 0) {
+        out_id = (UINT)strtoul(devs[out_index].id + 3, NULL, 10);
+    }
 
     MMRESULT mr = MMSYSERR_NOERROR;
     if (in_index != -2) {
@@ -241,14 +280,30 @@ int as_audio_read(AsAudio *a, float *dst, int frames) {
     return as_ring_read_latest(&a->ring, dst, frames);
 }
 
-int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
-    if (!a) return -1;
-    if (!(freq >= 1.0) || freq > 20000.0) return -1;
-    if (!(amp >= 0.0) || amp > 1.0) return -1;
-    as_atomic_store_u64(&a->freq_bits, double_bits(freq));
-    as_atomic_store_u64(&a->amp_bits, double_bits(amp));
+int as_audio_set_generator(AsAudio *a, const AsGenConfig *cfg, int on) {
+    if (!a || !cfg) return -1;
+    if (!(cfg->freq_hz >= 1.0) || cfg->freq_hz > 20000.0) return -1;
+    if (!(cfg->amp >= 0.0) || cfg->amp > 1.0) return -1;
+    int wave = cfg->wave;
+    if (wave < 0 || wave >= AS_WAVE_COUNT) return -1;
+    as_atomic_store_u64(&a->freq_bits, double_bits(cfg->freq_hz));
+    as_atomic_store_u64(&a->freq_end_bits, double_bits(cfg->freq_end_hz));
+    as_atomic_store_u64(&a->amp_bits, double_bits(cfg->amp));
+    as_atomic_store_u64(&a->period_bits, double_bits(cfg->period_s));
+    as_atomic_store_int(&a->wave, wave);
     as_atomic_store_int(&a->tone_on, on ? 1 : 0);
     return 0;
+}
+
+int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
+    AsGenConfig cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.wave = AS_WAVE_SINE;
+    cfg.freq_hz = freq;
+    cfg.freq_end_hz = freq;
+    cfg.amp = amp;
+    cfg.period_s = 1.0;
+    return as_audio_set_generator(a, &cfg, on);
 }
 
 int as_audio_channels(const AsAudio *a) {

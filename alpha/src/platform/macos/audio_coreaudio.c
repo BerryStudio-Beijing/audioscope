@@ -1,6 +1,7 @@
 /* AudioScope by BerryStudio 0.7-alpha — macOS CoreAudio backend (up to 8ch float32). */
 #include "platform/audio_backend.h"
 #include "core/api.h"
+#include "core/generator.h"
 #include "core/ring.h"
 
 #include <AudioToolbox/AudioToolbox.h>
@@ -27,9 +28,16 @@ struct AsAudio {
     int channels;
     AsRing ring;
     _Atomic int tone_on;
+    _Atomic int wave;
     _Atomic uint64_t freq_bits;
+    _Atomic uint64_t freq_end_bits;
     _Atomic uint64_t amp_bits;
-    double phase;
+    _Atomic uint64_t period_bits;
+    AsGenerator gen;
+    float scratch[AS_MAX_BLOCK];
+    int fade;      /* 启动淡入已输出的样本数（仅音频线程访问） */
+    int fade_len;  /* 200 ms 对应样本数 */
+    int prev_on;
 };
 
 static char g_error[256];
@@ -172,15 +180,28 @@ static OSStatus output_proc(AudioDeviceID dev, const AudioTimeStamp *now,
 
     float tmp[AS_MAX_BLOCK * 2];
     int on = atomic_load_explicit(&a->tone_on, memory_order_relaxed);
-    double freq = bits_double(atomic_load_explicit(&a->freq_bits, memory_order_relaxed));
-    double amp = bits_double(atomic_load_explicit(&a->amp_bits, memory_order_relaxed));
-    double step = on ? 2.0 * AS_PI * freq / a->fs : 0.0;
+    if (on && !a->prev_on) a->fade = 0;
+    if (!on) a->fade = 0;
+    a->prev_on = on;
+    if (on) {
+        AsGenConfig cfg;
+        cfg.wave = atomic_load_explicit(&a->wave, memory_order_relaxed);
+        cfg.freq_hz = bits_double(
+            atomic_load_explicit(&a->freq_bits, memory_order_relaxed));
+        cfg.freq_end_hz = bits_double(
+            atomic_load_explicit(&a->freq_end_bits, memory_order_relaxed));
+        cfg.amp = bits_double(
+            atomic_load_explicit(&a->amp_bits, memory_order_relaxed));
+        cfg.period_s = bits_double(
+            atomic_load_explicit(&a->period_bits, memory_order_relaxed));
+        as_gen_render(&a->gen, &cfg, a->scratch, frames);
+    }
     for (int i = 0; i < frames; ++i) {
-        float v = 0.0f;
-        if (on) {
-            v = (float)(amp * sin(a->phase));
-            a->phase += step;
-            if (a->phase >= 2.0 * AS_PI) a->phase -= 2.0 * AS_PI;
+        float v = on ? a->scratch[i] : 0.0f;
+        /* 启动 200 ms 淡入：输出设备刚打开时不硬切到满电平。 */
+        if (on && a->fade < a->fade_len) {
+            ++a->fade;
+            v *= (float)a->fade / (float)a->fade_len;
         }
         tmp[2 * i] = v;
         tmp[2 * i + 1] = v;
@@ -248,8 +269,11 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     if (in_ch > AS_MAX_CH) in_ch = AS_MAX_CH;
     a->channels = in_ch;
     atomic_init(&a->tone_on, 0);
+    atomic_init(&a->wave, AS_WAVE_SINE);
     atomic_init(&a->freq_bits, double_bits(1000.0));
+    atomic_init(&a->freq_end_bits, double_bits(20000.0));
     atomic_init(&a->amp_bits, double_bits(0.1));
+    atomic_init(&a->period_bits, double_bits(1.0));
     if (as_ring_init(&a->ring, (uint32_t)(fs * 4.0), (uint32_t)a->channels) != 0) {
         set_error("ring allocation failed");
         free(a);
@@ -260,6 +284,13 @@ AsAudio *as_audio_open(int in_index, int out_index, double fs, int block) {
     if (in_dev) set_device_rate(in_dev, fs);
     double actual = out_dev ? device_rate(out_dev) : device_rate(in_dev);
     if (actual > 0.0) a->fs = actual;
+
+    /* 用设备实际采样率初始化发生器与 200 ms 淡入长度。 */
+    as_generator_init(&a->gen, a->fs);
+    a->fade = 0;
+    a->fade_len = (int)(a->fs * 0.2);
+    if (a->fade_len < 1) a->fade_len = 1;
+    a->prev_on = 0;
 
     if (in_dev) {
         OSStatus st = AudioDeviceCreateIOProcID(in_dev, input_proc, a, &a->in_proc);
@@ -311,14 +342,34 @@ int as_audio_read(AsAudio *a, float *dst, int frames) {
     return as_ring_read_latest(&a->ring, dst, frames);
 }
 
-int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
-    if (!a) return -1;
-    if (!(freq >= 1.0) || freq > 20000.0) return -1;
-    if (!(amp >= 0.0) || amp > 1.0) return -1;
-    atomic_store_explicit(&a->freq_bits, double_bits(freq), memory_order_relaxed);
-    atomic_store_explicit(&a->amp_bits, double_bits(amp), memory_order_relaxed);
+int as_audio_set_generator(AsAudio *a, const AsGenConfig *cfg, int on) {
+    if (!a || !cfg) return -1;
+    if (!(cfg->freq_hz >= 1.0) || cfg->freq_hz > 20000.0) return -1;
+    if (!(cfg->amp >= 0.0) || cfg->amp > 1.0) return -1;
+    int wave = cfg->wave;
+    if (wave < 0 || wave >= AS_WAVE_COUNT) return -1;
+    atomic_store_explicit(&a->freq_bits, double_bits(cfg->freq_hz),
+                          memory_order_relaxed);
+    atomic_store_explicit(&a->freq_end_bits, double_bits(cfg->freq_end_hz),
+                          memory_order_relaxed);
+    atomic_store_explicit(&a->amp_bits, double_bits(cfg->amp),
+                          memory_order_relaxed);
+    atomic_store_explicit(&a->period_bits, double_bits(cfg->period_s),
+                          memory_order_relaxed);
+    atomic_store_explicit(&a->wave, wave, memory_order_relaxed);
     atomic_store_explicit(&a->tone_on, on ? 1 : 0, memory_order_relaxed);
     return 0;
+}
+
+int as_audio_set_tone(AsAudio *a, double freq, double amp, int on) {
+    AsGenConfig cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.wave = AS_WAVE_SINE;
+    cfg.freq_hz = freq;
+    cfg.freq_end_hz = freq;
+    cfg.amp = amp;
+    cfg.period_s = 1.0;
+    return as_audio_set_generator(a, &cfg, on);
 }
 
 int as_audio_channels(const AsAudio *a) {
