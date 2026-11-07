@@ -59,6 +59,36 @@ std::string fmt_signed(double v, int decimals = 1) {
     return minus_sign(buf);
 }
 
+/* ---- 0.9.3: device + preset helpers ---------------------------------- */
+
+std::string device_name(const NativeModel *m, int sel, bool input) {
+    if (!m || sel < 0 || sel >= (int)m->devices.size()) return "system default";
+    const NativeDevice &d = m->devices[(size_t)sel];
+    if (input ? !d.is_input : !d.is_output) return "system default";
+    return d.name;
+}
+
+int cycle_device(const NativeModel *m, int sel, bool input) {
+    if (!m) return -1;
+    std::vector<int> cand;
+    cand.push_back(-1);
+    for (size_t i = 0; i < m->devices.size(); ++i) {
+        const NativeDevice &d = m->devices[i];
+        if (input ? d.is_input : d.is_output) cand.push_back((int)i);
+    }
+    for (size_t k = 0; k < cand.size(); ++k) {
+        if (cand[k] == sel) return cand[(k + 1) % cand.size()];
+    }
+    return cand.size() > 1 ? cand[1] : cand[0];
+}
+
+int preset_index(double value, const double *values, int n) {
+    int best = 0;
+    for (int i = 1; i < n; ++i)
+        if (std::fabs(values[i] - value) < std::fabs(values[best] - value)) best = i;
+    return best;
+}
+
 void label_value(UI *u, double x, double y, double w, const char *label,
                  const std::string &value, uint32_t color) {
     /* 同一基线上混排 Label(11) 与 Value(16)：行高不同也不会上下错位，
@@ -130,21 +160,32 @@ void draw_scope(UI *u, NativeModel *m, NativeActions *act) {
     ui_text(u, x, y, FONT_SMALL, g_pal.text_faint, "INPUT");
     ui_text_right(u, as_rect(x, y - 2, w, 18), FONT_VALUE, g_pal.text,
                   m->capture ? "CAPTURE" : "SYNTHETIC");
-    label_value(u, x, y + 26, w, "DEVICE", m->device, g_pal.text);
-    label_value(u, x, y + 50, w, "RATE", fmt(m->fs, 0) + " Hz", g_pal.text);
-    label_value(u, x, y + 74, w, "MODE", "Inst", g_pal.text);
-    if (ui_button(u, 200, as_rect(x, y + 100, w, 30),
+    label_value(u, x, y + 26, w, "IN", device_name(m, m->sel_in, true),
+                g_pal.text);
+    if (ui_button(u, 202, as_rect(x, y + 46, w, 26), "CYCLE INPUT", BTN_SMALL)) {
+        m->sel_in = cycle_device(m, m->sel_in, true);
+        m->io_dirty = true;
+    }
+    label_value(u, x, y + 80, w, "OUT", device_name(m, m->sel_out, false),
+                g_pal.text);
+    if (ui_button(u, 203, as_rect(x, y + 100, w, 26), "CYCLE OUTPUT", BTN_SMALL)) {
+        m->sel_out = cycle_device(m, m->sel_out, false);
+        m->io_dirty = true;
+    }
+    label_value(u, x, y + 134, w, "RATE", fmt(m->fs, 0) + " Hz", g_pal.text);
+    label_value(u, x, y + 158, w, "MODE", "Inst", g_pal.text);
+    if (ui_button(u, 200, as_rect(x, y + 184, w, 30),
                   m->capture ? "STOP CAPTURE" : "CAPTURE INPUT",
                   m->capture ? BTN_DANGER : BTN_NORMAL)) {
         act->toggle_capture = true;
     }
     int hold = m->hold ? 1 : 0;
-    if (ui_toggle(u, 201, as_rect(x, y + 138, w, 30), "HOLD  (freeze)", &hold)) {
+    if (ui_toggle(u, 201, as_rect(x, y + 222, w, 30), "HOLD  (freeze)", &hold)) {
         m->hold = hold != 0;
         m->message = m->hold ? "display held" : "display live";
     }
 
-    y = ui_group(u, x, y + 190, w, "CHANNELS");
+    y = ui_group(u, x, y + 274, w, "CHANNELS");
     ui_text(u, x, y, FONT_SMALL, g_pal.text_dim, "CH1  ·  AC  ·  ±1.0 V");
     ui_text(u, x, y + 22, FONT_SMALL, g_pal.text_faint, "CH2  ·  AC  ·  ±1.0 V");
 
@@ -153,20 +194,13 @@ void draw_scope(UI *u, NativeModel *m, NativeActions *act) {
     ui_text_baseline(u, x, y + 34, FONT_SMALL, g_pal.text_faint,
                      "trigger: CH1 rising · 0.00 V");
 
-    /* 左下角的常驻安全声明：空间不浪费，也符合"安全 > 功能"的排序。 */
-    double sy = l.y + l.h - 96;
-    ui_line(u, x, sy - 12, x + w, sy - 12, g_pal.line_soft, 1);
-    ui_text_baseline(u, x, sy + 6, FONT_LABEL, g_pal.text_faint, "SAFETY");
-    ui_text_baseline(u, x, sy + 28, FONT_SMALL, g_pal.text_dim,
-                     "software cannot protect");
-    ui_text_baseline(u, x, sy + 46, FONT_SMALL, g_pal.text_dim,
-                     "the sound card.");
-    ui_text_baseline(u, x, sy + 66, FONT_SMALL, g_pal.text_faint,
-                     "use a protected front end");
-
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
-    title_block(u, c, "TIME DOMAIN", "CH1 · 48 kHz · 15 ms window");
+    const double win_ms = 720.0 / (m->fs > 0 ? m->fs : 48000.0) * 1000.0;
+    char scope_sub[96];
+    std::snprintf(scope_sub, sizeof(scope_sub), "CH1 · %.0f Hz · %.2f ms window",
+                  m->fs, win_ms);
+    title_block(u, c, "TIME DOMAIN", scope_sub);
     /* 左侧留 34px 给 Y 轴刻度：刻度不压曲线（图表安全区规则）。 */
     ASRect plot = as_rect(c.x + PAD + 34, c.y + 48, c.w - PAD * 2 - 44, c.h - 96);
     ui_plot(u, plot, 4);
@@ -192,12 +226,16 @@ void draw_scope(UI *u, NativeModel *m, NativeActions *act) {
                            g_pal.text_faint, "\xe2\x88\x92" "1.0");
     double bottom = plot.y + plot.h + 18;
     ui_text_baseline(u, plot.x, bottom, FONT_SMALL, g_pal.text_faint, "0");
-    const char *midlab = "7.5 ms";
+    char midbuf[32];
+    std::snprintf(midbuf, sizeof(midbuf), "%.1f ms", win_ms * 0.5);
+    const char *midlab = midbuf;
     double mw = ui_text_width(u, FONT_SMALL, midlab);
     ui_text_baseline(u, plot.x + plot.w * 0.5 - mw * 0.5, bottom, FONT_SMALL,
                      g_pal.text_faint, midlab);
+    char endbuf[32];
+    std::snprintf(endbuf, sizeof(endbuf), "%.1f ms", win_ms);
     ui_text_baseline_right(u, plot.x + plot.w, bottom, FONT_SMALL,
-                           g_pal.text_faint, "15 ms");
+                           g_pal.text_faint, endbuf);
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
@@ -219,6 +257,17 @@ void draw_scope(UI *u, NativeModel *m, NativeActions *act) {
     ui_text(u, rx, yy + 170, FONT_SMALL,
             m->cal_fs_vrms > 0 ? g_pal.good : g_pal.warn,
             m->cal_fs_vrms > 0 ? "measured" : "dBFS only");
+
+    /* 常驻安全声明：设备选择变多了，这条不能丢。 */
+    const double sy = r.y + r.h - 96;
+    ui_line(u, rx, sy - 12, rx + rw, sy - 12, g_pal.line_soft, 1);
+    ui_text_baseline(u, rx, sy + 6, FONT_LABEL, g_pal.text_faint, "SAFETY");
+    ui_text_baseline(u, rx, sy + 28, FONT_SMALL, g_pal.text_dim,
+                     "software cannot protect");
+    ui_text_baseline(u, rx, sy + 46, FONT_SMALL, g_pal.text_dim,
+                     "the sound card.");
+    ui_text_baseline(u, rx, sy + 66, FONT_SMALL, g_pal.text_faint,
+                     "use a protected front end");
 }
 
 void draw_spectrum(UI *u, NativeModel *m, NativeActions *act) {
@@ -227,10 +276,17 @@ void draw_spectrum(UI *u, NativeModel *m, NativeActions *act) {
     mat_raised(u, l, RADIUS_CARD);
     double x = l.x + PAD, w = l.w - PAD * 2;
     double y = ui_group(u, x, l.y + PAD, w, "FFT");
-    label_value(u, x, y, w, "SIZE", "4096", g_pal.text);
-    label_value(u, x, y + 26, w, "WINDOW", "Hann", g_pal.text);
-    label_value(u, x, y + 52, w, "RATE", fmt(m->fs, 0) + " Hz", g_pal.text);
-    y = ui_group(u, x, y + 92, w, "SOURCE");
+    static const char *const kFftSizes[5] = {"1024", "2048", "4096", "8192",
+                                              "16384"};
+    static const int kFftValues[5] = {1024, 2048, 4096, 8192, 16384};
+    int fft_sel = 2;
+    for (int i = 0; i < 5; ++i)
+        if (kFftValues[i] == m->fft_size) fft_sel = i;
+    if (ui_cycle(u, 230, as_rect(x, y, w, 26), kFftSizes, 5, &fft_sel))
+        m->fft_size = kFftValues[fft_sel];
+    label_value(u, x, y + 34, w, "WINDOW", "Hann", g_pal.text);
+    label_value(u, x, y + 60, w, "RATE", fmt(m->fs, 0) + " Hz", g_pal.text);
+    y = ui_group(u, x, y + 100, w, "SOURCE");
     ui_text(u, x, y, FONT_SMALL, g_pal.text_dim, m->capture ? "capture · CH1" : "synthetic · CH1");
     ui_text(u, x, y + 24, FONT_SMALL, g_pal.text_faint, "peak-relative, 100 dB floor");
     y = ui_group(u, x, y + 62, w, "HARMONICS");
@@ -239,7 +295,9 @@ void draw_spectrum(UI *u, NativeModel *m, NativeActions *act) {
 
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
-    title_block(u, c, "SPECTRUM", "Hann · 4096 · 20 Hz – 20 kHz");
+    const std::string sub =
+        "Hann · " + std::to_string(m->fft_size) + " · 20 Hz – 20 kHz";
+    title_block(u, c, "SPECTRUM", sub.c_str());
     ASRect p = as_rect(c.x + PAD + 40, c.y + 48, c.w - PAD * 2 - 56, c.h - 96);
     ui_plot(u, p, 4);
     for (int i = 0; i <= 5; ++i)
@@ -353,6 +411,57 @@ void draw_measure(UI *u, NativeModel *m, NativeActions *act) {
     ui_text(u, x, y + 22, FONT_SMALL, g_pal.text_faint, "20 Hz – 20 kHz");
     ui_text(u, x, y + 44, FONT_SMALL, g_pal.text_faint, "uncalibrated → dBFS only");
 
+    /* ---- 0.9.3 signal generator：所有输出都从 −20 dBFS 起 ---------- */
+    y = ui_group(u, x, y + 76, w, "GENERATOR");
+    const char *wave_labels[AS_WAVE_COUNT];
+    for (int i = 0; i < AS_WAVE_COUNT; ++i) wave_labels[i] = as_wave_name(i);
+    int wave = m->gen_wave >= 0 && m->gen_wave < AS_WAVE_COUNT ? m->gen_wave : 0;
+    ui_text_baseline(u, x, y + 18, FONT_SMALL, g_pal.text_faint, "WAVE");
+    if (ui_cycle(u, 240, as_rect(x + 44, y, w - 44, 26), wave_labels,
+                 AS_WAVE_COUNT, &wave)) {
+        m->gen_wave = wave;
+        m->gen_dirty = true;
+    }
+    ui_text_baseline(u, x, y + 48, FONT_SMALL, g_pal.text_faint, "FREQ");
+    static const double kGenFreq[7] = {20, 100, 440, 1000, 5000, 10000, 20000};
+    static const char *const kGenFreqLabels[7] = {"20 Hz", "100 Hz", "440 Hz",
+                                                   "1 kHz", "5 kHz", "10 kHz",
+                                                   "20 kHz"};
+    int freq_idx = preset_index(m->gen_hz, kGenFreq, 7);
+    if (ui_cycle(u, 242, as_rect(x + 44, y + 30, w - 44, 26), kGenFreqLabels, 7,
+                 &freq_idx)) {
+        m->gen_hz = kGenFreq[freq_idx];
+        m->gen_dirty = true;
+    }
+    ui_text_baseline(u, x, y + 78, FONT_SMALL, g_pal.text_faint, "LEVEL");
+    static const double kGenLevel[4] = {-60, -40, -30, -20};
+    static const char *const kGenLevelLabels[4] = {"−60 dBFS", "−40 dBFS",
+                                                    "−30 dBFS", "−20 dBFS"};
+    int level_idx = preset_index(m->gen_db, kGenLevel, 4);
+    if (ui_cycle(u, 244, as_rect(x + 44, y + 60, w - 44, 26), kGenLevelLabels, 4,
+                 &level_idx)) {
+        m->gen_db = kGenLevel[level_idx];
+        m->gen_dirty = true;
+    }
+    ui_text_baseline(u, x, y + 108, FONT_SMALL, g_pal.text_faint, "PERIOD");
+    static const double kGenPeriod[5] = {0.05, 0.1, 0.5, 1.0, 2.0};
+    static const char *const kGenPeriodLabels[5] = {"50 ms", "100 ms", "500 ms",
+                                                     "1 s", "2 s"};
+    int period_idx = preset_index(m->gen_period, kGenPeriod, 5);
+    if (ui_cycle(u, 246, as_rect(x + 44, y + 90, w - 44, 26), kGenPeriodLabels,
+                 5, &period_idx)) {
+        m->gen_period = kGenPeriod[period_idx];
+        m->gen_dirty = true;
+    }
+    int gen_on = m->gen_on ? 1 : 0;
+    if (ui_toggle(u, 248, as_rect(x, y + 128, w, 30),
+                  m->gen_on ? "OUTPUT ON" : "OUTPUT OFF", &gen_on)) {
+        m->gen_on = gen_on != 0;
+        m->gen_dirty = true;
+    }
+    ui_text(u, x, y + 168, FONT_SMALL, g_pal.text_faint,
+            m->gen_hot_allowed ? "hot unlocked" : "locked ≤ −20 dBFS");
+
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "CHANNEL MEASUREMENTS", "8 channels · current frame");
@@ -429,7 +538,7 @@ void draw_repair(UI *u, NativeModel *m, NativeActions *act) {
     mat_raised(u, l, RADIUS_CARD);
     double x = l.x + PAD, w = l.w - PAD * 2;
     double y = ui_group(u, x, l.y + PAD, w, "PLAN");
-    ui_text(u, x, y, FONT_VALUE, g_pal.text, "Tape deck");
+    ui_text(u, x, y, FONT_VALUE, g_pal.text, "Tape deck (demo)");
     ui_text(u, x, y + 24, FONT_SMALL, g_pal.text_faint, "quick verification · 4 steps");
     if (ui_button(u, 300, as_rect(x, y + 58, w, 32), "RUN TAPE PLAN", BTN_PRIMARY))
         act->run_repair = true;
@@ -440,11 +549,11 @@ void draw_repair(UI *u, NativeModel *m, NativeActions *act) {
                   BTN_NORMAL))
         act->run_loopback = true;
     ui_text(u, x, y + 174, FONT_SMALL, g_pal.text_faint,
-            "tone −20 dBFS → default output/input");
+            "tone −20 dBFS → selected out / in");
 
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
-    title_block(u, c, "REPAIR PLAN — TAPE", "thresholds are advisory");
+    title_block(u, c, "REPAIR PLAN — TAPE (SIMULATED)", "fixtures, not a DUT result");
     double tx = c.x + PAD + 8, ty = c.y + 56;
     double tw = c.w - PAD * 2 - 16;
     double right = c.x + c.w - PAD;
@@ -485,18 +594,21 @@ void draw_repair(UI *u, NativeModel *m, NativeActions *act) {
                      "PLAN VERDICT");
     bool pass = m->plan_ran ? m->plan_pass : true;
     ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, pass ? g_pal.good : g_pal.bad,
-                     m->plan_ran ? (pass ? "PASS" : "FAIL") : "—");
+                     m->plan_ran ? (pass ? "DEMO PASS" : "DEMO FAIL") : "—");
     if (ui_button(u, 301, as_rect(rx, r.y + 96, rw, 32), "EXPORT PDF", BTN_NORMAL))
         act->export_report = true;
     ui_text(u, rx, r.y + 140, FONT_SMALL, g_pal.text_faint, "writes PDF + JSON + HTML");
-    ui_text(u, rx, r.y + 160, FONT_SMALL,
+    ui_text(u, rx, r.y + 158, FONT_SMALL, g_pal.warn,
+            "synthetic fixtures — not a DUT result");
+    ui_text(u, rx, r.y + 180, FONT_SMALL,
             m->loopback_ran ? (m->loopback_pass ? g_pal.good : g_pal.bad)
                             : g_pal.text_faint,
-            m->loopback_ran ? (m->loopback_pass ? "loopback PASS" : "loopback FAIL")
-                            : "loopback: not run");
+            m->loopback_ran
+                ? (m->loopback_pass ? "connectivity OK" : "connectivity FAIL")
+                : "connectivity: not run");
     if (m->loopback_ran) {
-        label_value(u, rx, r.y + 186, rw, "LEVEL", fmt(m->loopback_level, 1) + " dBFS", g_pal.text);
-        label_value(u, rx, r.y + 212, rw, "THD", fmt(m->loopback_thd, 3) + " %", g_pal.text);
+        label_value(u, rx, r.y + 204, rw, "LEVEL", fmt(m->loopback_level, 1) + " dBFS", g_pal.text);
+        label_value(u, rx, r.y + 230, rw, "THD", fmt(m->loopback_thd, 3) + " %", g_pal.text);
     }
 }
 

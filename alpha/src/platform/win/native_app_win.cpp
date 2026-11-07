@@ -300,6 +300,45 @@ std::wstring fmt_signed(double value, int decimals) {
     return pretty_minus(std::wstring(buf));
 }
 
+/* ---- 0.9.3: generator presets + device helpers ------------------------ */
+const int kFftValues[5] = {1024, 2048, 4096, 8192, 16384};
+const double kGenFreq[7] = {20, 100, 440, 1000, 5000, 10000, 20000};
+const double kGenLevel[4] = {-60, -40, -30, -20};
+const double kGenPeriod[5] = {0.05, 0.1, 0.5, 1.0, 2.0};
+
+int nearest_preset(double value, const double *values, int n) {
+    int best = 0;
+    for (int i = 1; i < n; ++i)
+        if (std::fabs(values[i] - value) < std::fabs(values[best] - value))
+            best = i;
+    return best;
+}
+
+int next_preset(double value, const double *values, int n) {
+    return (nearest_preset(value, values, n) + 1) % n;
+}
+
+std::wstring device_label(const NativeModel &m, int sel, bool input) {
+    if (sel < 0 || sel >= static_cast<int>(m.devices.size()))
+        return L"system default";
+    const NativeDevice &d = m.devices[static_cast<size_t>(sel)];
+    if (input ? !d.is_input : !d.is_output) return L"system default";
+    return widen(d.name);
+}
+
+int cycle_device(const NativeModel &m, int sel, bool input) {
+    std::vector<int> cand;
+    cand.push_back(-1);
+    for (size_t i = 0; i < m.devices.size(); ++i) {
+        const NativeDevice &d = m.devices[i];
+        if (input ? d.is_input : d.is_output) cand.push_back((int)i);
+    }
+    for (size_t k = 0; k < cand.size(); ++k) {
+        if (cand[k] == sel) return cand[(k + 1) % cand.size()];
+    }
+    return cand.size() > 1 ? cand[1] : cand[0];
+}
+
 gd::Font *make_font(const wchar_t *const *names, int count, float px) {
     for (int i = 0; i < count; ++i) {
         gd::Font *f = new gd::Font(names[i], px, gd::FontStyleRegular,
@@ -719,18 +758,25 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
               TEXT_LEFT);
     text_rect(g, rect(x, y - 2.0f, w, 20.0f), FONT_VALUE, g_pal.text,
               m.capture ? L"CAPTURE" : L"SYNTHETIC", TEXT_RIGHT);
-    label_value(g, x, y + 26.0f, w, L"DEVICE", widen(m.device), g_pal.text);
-    label_value(g, x, y + 50.0f, w, L"RATE", fmt(m.fs, 0) + L" Hz",
+    label_value(g, x, y + 26.0f, w, L"IN", device_label(m, m.sel_in, true),
                 g_pal.text);
-    label_value(g, x, y + 74.0f, w, L"MODE", L"Inst", g_pal.text);
+    button(g, 202, rect(x, y + 46.0f, w, 26.0f), L"CYCLE INPUT",
+           BTN_GHOST);
+    label_value(g, x, y + 80.0f, w, L"OUT", device_label(m, m.sel_out, false),
+                g_pal.text);
+    button(g, 203, rect(x, y + 100.0f, w, 26.0f), L"CYCLE OUTPUT",
+           BTN_GHOST);
+    label_value(g, x, y + 134.0f, w, L"RATE", fmt(m.fs, 0) + L" Hz",
+                g_pal.text);
+    label_value(g, x, y + 158.0f, w, L"MODE", L"Inst", g_pal.text);
 
-    button(g, 200, rect(x, y + 100.0f, w, 30.0f),
+    button(g, 200, rect(x, y + 184.0f, w, 30.0f),
            m.capture ? L"STOP CAPTURE" : L"CAPTURE INPUT",
            m.capture ? BTN_DANGER : BTN_NORMAL);
-    toggle(g, 201, rect(x, y + 138.0f, w, 30.0f), L"HOLD  (freeze)",
+    toggle(g, 201, rect(x, y + 222.0f, w, 30.0f), L"HOLD  (freeze)",
            m.hold);
 
-    y = group(g, x, y + 190.0f, w, L"CHANNELS");
+    y = group(g, x, y + 274.0f, w, L"CHANNELS");
     text_rect(g, rect(x, y, w, 18.0f), FONT_SMALL, g_pal.text_dim,
               L"CH1  ·  AC  ·  ±1.0 V", TEXT_LEFT);
     text_rect(g, rect(x, y + 22.0f, w, 18.0f), FONT_SMALL, g_pal.text_faint,
@@ -741,19 +787,13 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
     text(g, x, y + 26.0f, FONT_SMALL, g_pal.text_faint,
          L"trigger: CH1 rising · 0.00 V");
 
-    /* 左下角常驻安全声明：与 macOS 一致，空间不浪费。 */
-    const float sy = l.y + l.h - 96.0f;
-    line(g, x, sy - 12.0f, x + w, sy - 12.0f, g_pal.line_soft, 1.0f);
-    text(g, x, sy, FONT_LABEL, g_pal.text_faint, L"SAFETY");
-    text(g, x, sy + 22.0f, FONT_SMALL, g_pal.text_dim,
-         L"software cannot protect");
-    text(g, x, sy + 40.0f, FONT_SMALL, g_pal.text_dim, L"the sound card.");
-    text(g, x, sy + 60.0f, FONT_SMALL, g_pal.text_faint,
-         L"use a protected front end");
-
     Rect c = center_card();
     card(g, c);
-    title_block(g, c, L"TIME DOMAIN", L"CH1 · 48 kHz · 15 ms window");
+    const double win_ms = 720.0 / (m.fs > 0.0 ? m.fs : 48000.0) * 1000.0;
+    wchar_t scope_sub[96];
+    std::swprintf(scope_sub, 96, L"CH1 · %.0f Hz · %.2f ms window", m.fs,
+                  win_ms);
+    title_block(g, c, L"TIME DOMAIN", scope_sub);
 
     /* 左侧 34px 安全区放 Y 轴刻度，刻度不压曲线。 */
     Rect plot = rect(c.x + PAD + 34.0f, c.y + 48.0f, c.w - PAD * 2.0f - 44.0f,
@@ -795,12 +835,16 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
               FONT_SMALL, g_pal.text_faint, L"\x2212" L"1.0", TEXT_RIGHT);
     text_rect(g, rect(plot.x, plot.y + plot.h + 2.0f, 40.0f, 16.0f), FONT_SMALL,
               g_pal.text_faint, L"0", TEXT_LEFT);
+    wchar_t midbuf[32];
+    std::swprintf(midbuf, 32, L"%.1f ms", win_ms * 0.5);
+    wchar_t endbuf[32];
+    std::swprintf(endbuf, 32, L"%.1f ms", win_ms);
     text_rect(g, rect(plot.x + plot.w * 0.5f - 30.0f, plot.y + plot.h + 2.0f,
                       60.0f, 16.0f),
-              FONT_SMALL, g_pal.text_faint, L"7.5 ms", TEXT_CENTER);
+              FONT_SMALL, g_pal.text_faint, midbuf, TEXT_CENTER);
     text_rect(g, rect(plot.x + plot.w - 40.0f, plot.y + plot.h + 2.0f, 40.0f,
                       16.0f),
-              FONT_SMALL, g_pal.text_faint, L"15 ms", TEXT_RIGHT);
+              FONT_SMALL, g_pal.text_faint, endbuf, TEXT_RIGHT);
 
     Rect r = right_card();
     card(g, r);
@@ -836,6 +880,16 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
     text(g, rx, yy + 170.0f, FONT_SMALL,
          m.cal_fs_vrms > 0.0 ? g_pal.good : g_pal.warn,
          m.cal_fs_vrms > 0.0 ? L"measured" : L"dBFS only");
+
+    /* 常驻安全声明移到右卡底部：左卡新增了设备选择，避免与 TIMEBASE 重叠。 */
+    const float sy = r.y + r.h - 96.0f;
+    line(g, rx, sy - 12.0f, rx + rw, sy - 12.0f, g_pal.line_soft, 1.0f);
+    text(g, rx, sy, FONT_LABEL, g_pal.text_faint, L"SAFETY");
+    text(g, rx, sy + 22.0f, FONT_SMALL, g_pal.text_dim,
+         L"software cannot protect");
+    text(g, rx, sy + 40.0f, FONT_SMALL, g_pal.text_dim, L"the sound card.");
+    text(g, rx, sy + 60.0f, FONT_SMALL, g_pal.text_faint,
+         L"use a protected front end");
 }
 
 void draw_spectrum(gd::Graphics &g, NativeModel &m) {
@@ -844,12 +898,13 @@ void draw_spectrum(gd::Graphics &g, NativeModel &m) {
     const float x = l.x + PAD;
     const float w = l.w - PAD * 2.0f;
     float y = group(g, x, l.y + PAD, w, L"FFT");
-    label_value(g, x, y, w, L"SIZE", L"4096", g_pal.text);
-    label_value(g, x, y + 26.0f, w, L"WINDOW", L"Hann", g_pal.text);
-    label_value(g, x, y + 52.0f, w, L"RATE", fmt(m.fs, 0) + L" Hz",
+    button(g, 230, rect(x, y, w, 26.0f),
+           L"SIZE  " + std::to_wstring(m.fft_size) + L"  »", BTN_NORMAL);
+    label_value(g, x, y + 34.0f, w, L"WINDOW", L"Hann", g_pal.text);
+    label_value(g, x, y + 60.0f, w, L"RATE", fmt(m.fs, 0) + L" Hz",
                 g_pal.text);
 
-    y = group(g, x, y + 92.0f, w, L"SOURCE");
+    y = group(g, x, y + 100.0f, w, L"SOURCE");
     text(g, x, y, FONT_SMALL, g_pal.text_dim,
          m.capture ? L"capture · CH1" : L"synthetic · CH1");
     text(g, x, y + 24.0f, FONT_SMALL, g_pal.text_faint,
@@ -861,7 +916,9 @@ void draw_spectrum(gd::Graphics &g, NativeModel &m) {
 
     Rect c = center_card();
     card(g, c);
-    title_block(g, c, L"SPECTRUM", L"Hann · 4096 · 20 Hz – 20 kHz");
+    title_block(g, c, L"SPECTRUM",
+                L"Hann · " + std::to_wstring(m.fft_size) +
+                    L" · 20 Hz – 20 kHz");
 
     Rect p = rect(c.x + PAD + 40.0f, c.y + 48.0f,
                   c.w - PAD * 2.0f - 56.0f, c.h - 96.0f);
@@ -1009,7 +1066,10 @@ void draw_measure(gd::Graphics &g, NativeModel &m) {
     const float w = l.w - PAD * 2.0f;
     float y = group(g, x, l.y + PAD, w, L"RUN");
     label_value(g, x, y, w, L"FRAMES", L"720", g_pal.text);
-    label_value(g, x, y + 26.0f, w, L"WINDOW", L"15 ms", g_pal.text);
+    wchar_t window_label[32];
+    std::swprintf(window_label, 32, L"%.2f ms",
+                  720.0 / (m.fs > 0.0 ? m.fs : 48000.0) * 1000.0);
+    label_value(g, x, y + 26.0f, w, L"WINDOW", window_label, g_pal.text);
     label_value(g, x, y + 52.0f, w, L"REPEAT", L"1×", g_pal.text);
 
     y = group(g, x, y + 92.0f, w, L"LIMITS");
@@ -1017,6 +1077,47 @@ void draw_measure(gd::Graphics &g, NativeModel &m) {
     text(g, x, y + 22.0f, FONT_SMALL, g_pal.text_faint, L"20 Hz – 20 kHz");
     text(g, x, y + 44.0f, FONT_SMALL, g_pal.text_faint,
          L"uncalibrated → dBFS only");
+
+    y = group(g, x, y + 76.0f, w, L"GENERATOR");
+    static const wchar_t *const freq_labels[7] = {
+        L"20 Hz", L"100 Hz", L"440 Hz", L"1 kHz", L"5 kHz", L"10 kHz",
+        L"20 kHz"};
+    static const wchar_t *const level_labels[4] = {
+        L"\x2212" L"60 dBFS", L"\x2212" L"40 dBFS", L"\x2212" L"30 dBFS",
+        L"\x2212" L"20 dBFS"};
+    static const wchar_t *const period_labels[5] = {
+        L"50 ms", L"100 ms", L"500 ms", L"1 s", L"2 s"};
+
+    text_rect(g, rect(x, y, 40.0f, 26.0f), FONT_SMALL, g_pal.text_faint,
+              L"WAVE", TEXT_LEFT);
+    button(g, 240, rect(x + 44.0f, y, w - 44.0f, 26.0f),
+           widen(as_wave_name(m.gen_wave)) + L"  »", BTN_NORMAL);
+    text_rect(g, rect(x, y + 30.0f, 40.0f, 26.0f), FONT_SMALL,
+              g_pal.text_faint, L"FREQ", TEXT_LEFT);
+    button(g, 242, rect(x + 44.0f, y + 30.0f, w - 44.0f, 26.0f),
+           std::wstring(freq_labels[nearest_preset(m.gen_hz, kGenFreq, 7)]) +
+               L"  »",
+           BTN_NORMAL);
+    text_rect(g, rect(x, y + 60.0f, 40.0f, 26.0f), FONT_SMALL,
+              g_pal.text_faint, L"LEVEL", TEXT_LEFT);
+    button(g, 244, rect(x + 44.0f, y + 60.0f, w - 44.0f, 26.0f),
+           std::wstring(level_labels[nearest_preset(m.gen_db, kGenLevel, 4)]) +
+               L"  »",
+           BTN_NORMAL);
+    text_rect(g, rect(x, y + 90.0f, 40.0f, 26.0f), FONT_SMALL,
+              g_pal.text_faint, L"PERIOD", TEXT_LEFT);
+    button(g, 246, rect(x + 44.0f, y + 90.0f, w - 44.0f, 26.0f),
+           std::wstring(
+               period_labels[nearest_preset(m.gen_period, kGenPeriod, 5)]) +
+               L"  »",
+           BTN_NORMAL);
+    toggle(g, 248, rect(x, y + 128.0f, w, 30.0f),
+           m.gen_on ? L"OUTPUT ON" : L"OUTPUT OFF", m.gen_on);
+    text_rect(g, rect(x, y + 164.0f, w, 18.0f), FONT_SMALL,
+              g_pal.text_faint,
+              m.gen_hot_allowed ? L"hot unlocked"
+                                : L"locked ≤ \x2212" L"20 dBFS",
+              TEXT_LEFT);
 
     Rect c = center_card();
     card(g, c);
@@ -1114,7 +1215,7 @@ void draw_repair(gd::Graphics &g, NativeModel &m) {
     const float x = l.x + PAD;
     const float w = l.w - PAD * 2.0f;
     float y = group(g, x, l.y + PAD, w, L"PLAN");
-    text(g, x, y, FONT_BRAND, g_pal.text, L"Tape deck");
+    text(g, x, y, FONT_BRAND, g_pal.text, L"Tape deck (demo)");
     text(g, x, y + 24.0f, FONT_SMALL, g_pal.text_faint,
          L"quick verification · 4 steps");
     button(g, 300, rect(x, y + 58.0f, w, 32.0f), L"RUN TAPE PLAN",
@@ -1125,7 +1226,8 @@ void draw_repair(gd::Graphics &g, NativeModel &m) {
 
     Rect c = center_card();
     card(g, c);
-    title_block(g, c, L"REPAIR PLAN — TAPE", L"thresholds are advisory");
+    title_block(g, c, L"REPAIR PLAN — TAPE (SIMULATED)",
+                L"fixtures, not a DUT result");
 
     const float ty = c.y + 56.0f;
     const float col_step = c.x + 24.0f;
@@ -1167,14 +1269,16 @@ void draw_repair(gd::Graphics &g, NativeModel &m) {
     const bool pass = m.plan_ran ? m.plan_pass : true;
     text(g, rx, r.y + 30.0f, FONT_CRIT,
          m.plan_ran ? (pass ? g_pal.good : g_pal.bad) : g_pal.text_faint,
-         m.plan_ran ? (pass ? L"PASS" : L"FAIL") : L"—");
+         m.plan_ran ? (pass ? L"DEMO PASS" : L"DEMO FAIL") : L"—");
 
     button(g, 301, rect(rx, r.y + 96.0f, rw, 32.0f), L"EXPORT PDF",
            BTN_NORMAL);
     text(g, rx, r.y + 140.0f, FONT_SMALL, g_pal.text_faint,
          L"writes PDF + JSON + HTML");
-    text(g, rx, r.y + 160.0f, FONT_SMALL, g_pal.text_faint,
-         m.plan_ran ? L"synthetic tape fixture" : L"no run");
+    text(g, rx, r.y + 158.0f, FONT_SMALL, g_pal.warn,
+         L"synthetic fixtures — not a DUT result");
+    text(g, rx, r.y + 182.0f, FONT_SMALL,
+         m.plan_ran ? L"advisory thresholds" : L"no run");
 }
 
 void draw_reports(gd::Graphics &g, NativeModel &m) {
@@ -1438,6 +1542,43 @@ void handle_command(HWND hwnd, int id) {
         case 201:
             g_model.hold = !g_model.hold;
             g_model.message = g_model.hold ? "display held" : "display live";
+            break;
+        case 202:
+            g_model.sel_in = cycle_device(g_model, g_model.sel_in, true);
+            g_model.io_dirty = true;
+            break;
+        case 203:
+            g_model.sel_out = cycle_device(g_model, g_model.sel_out, false);
+            g_model.io_dirty = true;
+            break;
+        case 230: {
+            int idx = 0;
+            for (int i = 0; i < 5; ++i)
+                if (kFftValues[i] == g_model.fft_size) idx = i;
+            g_model.fft_size = kFftValues[(idx + 1) % 5];
+            break;
+        }
+        case 240:
+            g_model.gen_wave = (g_model.gen_wave + 1) % AS_WAVE_COUNT;
+            g_model.gen_dirty = true;
+            break;
+        case 242:
+            g_model.gen_hz = kGenFreq[next_preset(g_model.gen_hz, kGenFreq, 7)];
+            g_model.gen_dirty = true;
+            break;
+        case 244:
+            g_model.gen_db =
+                kGenLevel[next_preset(g_model.gen_db, kGenLevel, 4)];
+            g_model.gen_dirty = true;
+            break;
+        case 246:
+            g_model.gen_period =
+                kGenPeriod[next_preset(g_model.gen_period, kGenPeriod, 5)];
+            g_model.gen_dirty = true;
+            break;
+        case 248:
+            g_model.gen_on = !g_model.gen_on;
+            g_model.gen_dirty = true;
             break;
         case 300:
             g_engine.run_repair(&g_model);

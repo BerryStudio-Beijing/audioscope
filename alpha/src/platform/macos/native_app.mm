@@ -198,7 +198,7 @@ void handle_loopback() {
     char msg[256];
     std::snprintf(msg, sizeof(msg), "Level %.1f dBFS · THD %.3f %% · %s",
                   g_model.loopback_level, g_model.loopback_thd,
-                  g_model.loopback_pass ? "PASS" : "FAIL");
+                  g_model.loopback_pass ? "connectivity OK" : "connectivity FAIL");
     show_alert("Loopback result", msg, !g_model.loopback_pass);
 }
 

@@ -83,6 +83,8 @@ MAC_TEST_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(TEST_C)) \
 NAV_TEST_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,tests/test_nav.c) \
                  $(BUILD)/mac/src/ui/native_ui.o \
                  $(BUILD)/mac/src/ui/native_theme.o
+MODEL_TEST_OBJS := $(MAC_LIB_OBJS) $(BUILD)/mac/src/app/native_model.o \
+                   $(BUILD)/mac/tests/test_model.o
 WIN_LIB_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C))
 WIN_OBJS := $(WIN_LIB_OBJS) \
             $(patsubst %.cpp,$(BUILD)/win/%.o,$(APP_CXX))
@@ -97,7 +99,7 @@ WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
 NATIVE_WIN_LDFLAGS := -mwindows -lwinmm -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 
 -include $(MAC_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) $(WIN_OBJS:.o=.d) \
-         $(MAC_TEST_OBJS:.o=.d) $(NAV_TEST_OBJS:.o=.d)
+         $(MAC_TEST_OBJS:.o=.d) $(NAV_TEST_OBJS:.o=.d) $(MODEL_TEST_OBJS:.o=.d)
 
 .PHONY: all mac app win win-app test clean dist
 
@@ -140,6 +142,10 @@ $(BUILD)/audioscope-alpha-navtest: $(NAV_TEST_OBJS)
 	$(MAC_CXX) $(NAV_TEST_OBJS) -o $@ -framework CoreGraphics \
 		-framework CoreText -framework CoreFoundation -lm
 
+$(BUILD)/audioscope-alpha-modeltest: $(MODEL_TEST_OBJS)
+	@mkdir -p $(BUILD)
+	$(MAC_CXX) $(MODEL_TEST_OBJS) -o $@ $(MAC_LDFLAGS)
+
 $(BUILD)/audioscope-alpha.exe: $(WIN_OBJS)
 	@mkdir -p $(BUILD)
 	$(WIN_CXX) $(WIN_OBJS) -o $@ $(WIN_LDFLAGS)
@@ -165,12 +171,14 @@ $(APP_BIN): $(MAC_LIB_OBJS) $(NATIVE_OBJS)
 	@codesign --force --deep --sign - $(APP_BUNDLE) >/dev/null 2>&1 || true
 	@echo "built $(APP_BUNDLE)"
 
-test: mac $(BUILD)/audioscope-alpha-ringtest $(BUILD)/audioscope-alpha-navtest app
+test: mac $(BUILD)/audioscope-alpha-ringtest $(BUILD)/audioscope-alpha-navtest \
+      $(BUILD)/audioscope-alpha-modeltest app
 	./$(BUILD)/audioscope-alpha selftest
 	./$(BUILD)/audioscope-alpha scope > /dev/null
 	./$(BUILD)/audioscope-alpha fft > /dev/null
 	./$(BUILD)/audioscope-alpha-ringtest
 	./$(BUILD)/audioscope-alpha-navtest
+	./$(BUILD)/audioscope-alpha-modeltest
 	rm -rf $(BUILD)/native-shots
 	$(APP_BIN) --shot $(BUILD)/native-shots
 	test -f $(BUILD)/native-shots/0_scope.png
