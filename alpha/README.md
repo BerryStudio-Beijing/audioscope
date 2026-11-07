@@ -1,7 +1,28 @@
-# AudioScope by BerryStudio — 0.9-alpha (Native)
+# AudioScope by BerryStudio — 0.9.1-beta (Native)
 
-> **AudioScope by BerryStudio** · `0.9.0-alpha.1` · macOS 12+ arm64 · Windows 10/11 x64
+> **AudioScope by BerryStudio** · `0.9.1-beta.1` · macOS 12+ arm64 · Windows 10/11 x64
 > C11 core + C++17 app · native AppKit/CoreGraphics + Win32/GDI+ · no Web UI
+
+## 0.9.1-beta 是什么
+
+0.9.1 是 0.9 原生界面的**体验与性能修正版**，功能范围不变：
+
+- **导航指示线**：改成时间驱动（140 ms ease-out），从当前位置滑向目标；
+  首帧和"减少动态"时直接落位，不再从左边飞过来。
+- **窗口自适应**：任意窗口比例都按 1120×700 等比缩放并居中，resize 时
+  立即重绘，鼠标命中与绘制共用同一套几何。
+- **性能**：刷新率 30 → 60 Hz；波形/频谱/XY 改成单条路径一次描边；
+  颜色、字体行、凸起渐变全部缓存；FFT/THD/相位降到 20 Hz。
+- **浅色模式**：示波器、频谱、XY 的测量面固定为深石墨（#283133），
+  不再跟着主题变亮。
+- **排印与表格**：Brand 角色 + 按钮 Label 角色；ASCII 字距 0.02–0.06em，
+  中文不加宽；Label 与 Value 共用基线；三张表改成固定列坐标；数字用真减号 −。
+- **图表刻度**：示波器 `+1.0 / 0 / −1.0`、`0 / 7.5 / 15 ms`；频谱
+  `0 … −100 dB`、`20 Hz / 1 kHz / 20 kHz`。
+- **Windows 同步**：深石墨测量面、同一套导航缓动、16 ms 定时器、
+  XY 单折线。
+
+完整清单见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 0.9-alpha 是什么
 
@@ -23,7 +44,7 @@ cd alpha
 # macOS 原生 app + CLI + 测试
 make app          # build/AudioScope.app
 make mac          # build/audioscope-alpha (CLI)
-make test         # 52 项 selftest + ringtest + native --shot 回归
+make test         # 52 项 selftest + ringtest + 导航动画回归 + native --shot
 
 # 离屏渲染七页（调试/截图）
 ./build/AudioScope.app/Contents/MacOS/AudioScope --shot build/shots

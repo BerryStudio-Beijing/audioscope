@@ -121,7 +121,8 @@ public:
 private:
     void synth_frames(float *ch1, float *ch2, int n);
     void push_audio(const float *ch1, const float *ch2, int n);
-    void compute(NativeModel *model);
+    void compute(NativeModel *model);      /* 每帧：波形 / 统计 / 通道表 */
+    void compute_spectrum(NativeModel *model); /* 降频：FFT / THD / 相位 */
     void update_xy(NativeModel *model);
     std::string report_dir() const;
 
@@ -133,9 +134,15 @@ private:
     double time_ = 0.0;
     std::vector<float> hist_;      /* 4096 mono history for FFT */
     std::vector<float> xy1_, xy2_; /* 4096 stereo history for XY */
+    std::vector<float> a_, b_;     /* 每帧复用的采集/合成缓冲 */
+    std::vector<float> inter_;     /* 交错读缓冲（最多 8 声道） */
     std::vector<double> win_;
     std::vector<double> fft_re_;
     std::vector<double> mag_;
+    std::vector<int> bin_idx_;     /* 对数频率 → FFT bin，只算一次 */
+    std::vector<double> bin_freq_;
+    int slow_div_ = 3;             /* 60 fps 下每 3 帧做一次 FFT ≈ 20 Hz */
+    int slow_count_ = 0;
     AsFft fft_{};
     bool fft_ok_ = false;
 };

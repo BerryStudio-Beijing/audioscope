@@ -14,6 +14,7 @@
 #include "ui/native_pages.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -34,8 +35,19 @@ double g_view_scale = 1.0;
 double g_view_ox = 0.0;
 double g_view_oy = 0.0;
 
+/* 单调时钟：动画与引擎都用真实经过时间，不再用"帧数/30"。
+ * 这样刷新率变化时动画时长不变（0.9 的导航指示线就是被帧率拖慢的）。 */
+double now_seconds() {
+    using clock = std::chrono::steady_clock;
+    static const clock::time_point t0 = clock::now();
+    return std::chrono::duration<double>(clock::now() - t0).count();
+}
+
+double g_anim_t = 0.0;
+
 constexpr double kDesignW = 1120.0;
 constexpr double kDesignH = 700.0;
+constexpr double kFrameHz = 60.0;
 
 void register_font_file(const char *path) {
     if (!path || !*path) return;
@@ -88,8 +100,7 @@ int render_png(const char *path, int scale) {
     }
     CGContextTranslateCTM(ctx, 0, kDesignH * scale);
     CGContextScaleCTM(ctx, scale, -scale);
-    native_ui_frame(&g_ui, ctx, kDesignW, kDesignH,
-                    (double)g_model.frame / 30.0);
+    native_ui_frame(&g_ui, ctx, kDesignW, kDesignH, g_anim_t);
     CGImageRef img = CGBitmapContextCreateImage(ctx);
     CGContextRelease(ctx);
     CGColorSpaceRelease(cs);
@@ -230,11 +241,36 @@ void process_pending() {
 } // namespace
 
 @interface ASNativeView : NSView
+- (void)update_metrics;
 @end
 
 @implementation ASNativeView
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
+
+/* 等比 letterbox：窗口任意比例都按 min(w/1120, h/700) 缩放并居中。
+ * 0.9 只在 drawRect 里算一次，窗口一改大小鼠标映射就还是旧值；
+ * 现在几何只在 update_metrics 里算，绘制和命中测试共用同一份。 */
+- (void)update_metrics {
+    NSRect b = self.bounds;
+    double s = std::min(b.size.width / kDesignW, b.size.height / kDesignH);
+    if (!(s > 0.0)) s = 1.0;
+    g_view_scale = s;
+    g_view_ox = (b.size.width - kDesignW * s) * 0.5;
+    g_view_oy = (b.size.height - kDesignH * s) * 0.5;
+}
+
+- (void)setFrameSize:(NSSize)newSize {
+    [super setFrameSize:newSize];
+    [self update_metrics];
+    [self setNeedsDisplay:YES];
+}
+
+- (void)viewDidMoveToWindow {
+    [super viewDidMoveToWindow];
+    self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self update_metrics];
+}
 
 - (void)drawRect:(NSRect)dirty {
     (void)dirty;
@@ -242,19 +278,22 @@ void process_pending() {
     if (!gc) return;
     CGContextRef ctx = gc.CGContext;
     NSRect b = self.bounds;
-    double s = std::min(b.size.width / kDesignW, b.size.height / kDesignH);
-    if (s <= 0.0) s = 1.0;
-    g_view_scale = s;
-    g_view_ox = (b.size.width - kDesignW * s) * 0.5;
-    g_view_oy = (b.size.height - kDesignH * s) * 0.5;
+    [self update_metrics];
 
     CGContextSaveGState(ctx);
-    CGContextSetFillColorWithColor(ctx, [NSColor blackColor].CGColor);
+    /* letterbox 外边跟主题同色，不再是一条生硬的黑边。 */
+    CGContextSetFillColorWithColor(
+        ctx, [[NSColor colorWithCalibratedRed:((g_pal.bg >> 24) & 0xff) / 255.0
+                                        green:((g_pal.bg >> 16) & 0xff) / 255.0
+                                         blue:((g_pal.bg >> 8) & 0xff) / 255.0
+                                        alpha:1.0] CGColor]);
     CGContextFillRect(ctx, b);
+    CGContextSetShouldAntialias(ctx, true);
+    CGContextSetAllowsAntialiasing(ctx, true);
+    CGContextSetShouldSmoothFonts(ctx, true);
     CGContextTranslateCTM(ctx, g_view_ox, g_view_oy);
-    CGContextScaleCTM(ctx, s, s);
-    native_ui_frame(&g_ui, ctx, kDesignW, kDesignH,
-                    (double)g_model.frame / 30.0);
+    CGContextScaleCTM(ctx, g_view_scale, g_view_scale);
+    native_ui_frame(&g_ui, ctx, kDesignW, kDesignH, g_anim_t);
     CGContextRestoreGState(ctx);
 
     if (g_ui.actions.run_repair) g_pending.run_repair = true;
@@ -312,14 +351,21 @@ void process_pending() {
 }
 @end
 
-@interface ASAppDelegate : NSObject <NSApplicationDelegate>
+@interface ASAppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate>
 @property(nonatomic, strong) NSWindow *window;
+@property(nonatomic, weak) NSView *view;
 @end
 
 @implementation ASAppDelegate
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
     (void)app;
     return YES;
+}
+
+- (void)windowDidResize:(NSNotification *)note {
+    (void)note;
+    /* 拖动窗口边缘时立即按新比例重绘，而不是等下一次定时器。 */
+    [self.view setNeedsDisplay:YES];
 }
 @end
 
@@ -386,20 +432,33 @@ int run_native_app(int argc, char **argv) {
         win.minSize = NSMakeSize(900, 560);
         win.backgroundColor = [NSColor blackColor];
         ASNativeView *view = [[ASNativeView alloc] initWithFrame:frame];
+        view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
         win.contentView = view;
+        win.delegate = delegate;
+        delegate.view = view;
         [win center];
         [win makeKeyAndOrderFront:nil];
         [win makeFirstResponder:view];
         delegate.window = win;
 
-        [NSTimer scheduledTimerWithTimeInterval:1.0 / 30.0
-                                        repeats:YES
-                                          block:^(NSTimer *timer) {
-            (void)timer;
-            g_engine.tick(&g_model, 1.0 / 30.0);
+        /* 60 Hz 刷新 + 真实 dt：帧率不再是动画速度的一部分。
+         * commonModes 保证拖动窗口 / 打开菜单时动画不冻结。 */
+        __block double frame_last = now_seconds();
+        NSTimer *timer = [NSTimer timerWithTimeInterval:1.0 / kFrameHz
+                                               repeats:YES
+                                                 block:^(NSTimer *t) {
+            (void)t;
+            double now = now_seconds();
+            double dt = now - frame_last;
+            frame_last = now;
+            if (dt > 0.25) dt = 0.25;   /* 跟踪循环结束后不要一次补太多 */
+            if (dt < 0.0) dt = 0.0;
+            g_anim_t = now;
+            g_engine.tick(&g_model, dt);
             process_pending();
             [view setNeedsDisplay:YES];
         }];
+        [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
 
         [app activateIgnoringOtherApps:YES];
         [app run];

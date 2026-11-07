@@ -36,31 +36,45 @@ ASRect right_card() {
     return as_rect(RIGHT_X, BODY_Y + PAD, RIGHT_W, BODY_H - PAD * 2);
 }
 
+/* 数字格式：真减号 U+2212（BERRY-UI-SPEC §3.5）。 */
+std::string minus_sign(std::string s) {
+    std::string out;
+    out.reserve(s.size() + 4);
+    for (char c : s) {
+        if (c == '-') out += "\xe2\x88\x92";
+        else out.push_back(c);
+    }
+    return out;
+}
+
 std::string fmt(double v, int decimals = 1) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%.*f", decimals, v);
-    return buf;
+    return minus_sign(buf);
 }
 
 std::string fmt_signed(double v, int decimals = 1) {
     char buf[64];
     std::snprintf(buf, sizeof(buf), "%+.*f", decimals, v);
-    return buf;
+    return minus_sign(buf);
 }
 
 void label_value(UI *u, double x, double y, double w, const char *label,
                  const std::string &value, uint32_t color) {
-    ui_text(u, x, y, FONT_SMALL, g_pal.text_faint, label);
-    ui_text_right(u, as_rect(x, y - 2, w, ui_font_height(FONT_VALUE)), FONT_VALUE,
-                  color, value.c_str());
+    /* 同一基线上混排 Label(11) 与 Value(16)：行高不同也不会上下错位，
+     * 右侧数值形成一条干净的列。 */
+    double baseline = y + ui_font_height(FONT_VALUE) * 0.78;
+    ui_text_baseline(u, x, baseline, FONT_SMALL, g_pal.text_faint, label);
+    ui_text_baseline_right(u, x + w, baseline, FONT_VALUE, color,
+                           value.c_str());
 }
 
 void title_block(UI *u, ASRect r, const char *title, const char *sub) {
-    ui_text(u, r.x + PAD, r.y + 12, FONT_SMALL, g_pal.text_faint, title);
+    double baseline = r.y + 22;
+    ui_text_baseline(u, r.x + PAD, baseline, FONT_LABEL, g_pal.text_dim, title);
     if (sub && *sub)
-        ui_text_right(u, as_rect(r.x + PAD, r.y + 10, r.w - PAD * 2,
-                                 ui_font_height(FONT_SMALL)),
-                      FONT_SMALL, g_pal.text_faint, sub);
+        ui_text_baseline_right(u, r.x + r.w - PAD, baseline, FONT_SMALL,
+                               g_pal.text_faint, sub);
     ui_line(u, r.x + PAD, r.y + 32, r.x + r.w - PAD, r.y + 32, g_pal.line_soft, 1);
 }
 
@@ -75,32 +89,29 @@ void plot_grid(UI *u, ASRect p, int cols, int rows) {
     }
 }
 
-double db_to_y(double db, ASRect p) {
-    double t = (db + 100.0) / 100.0;
-    return p.y + p.h - t * p.h;
-}
-
 /* --------------------------------------------------------------- header */
 void draw_header(UI *u, NativeModel *m) {
     ui_fill(u, as_rect(0, 0, W, kHeaderH), g_pal.bg);
-    ui_dot(u, 30, 26, 9, g_pal.accent);
-    ui_dot(u, 30, 26, 3, g_pal.bg);
-    ui_text(u, 48, 14, FONT_VALUE, g_pal.text, "AUDIOSCOPE");
-    ui_text(u, 48, 36, FONT_SMALL, g_pal.text_faint,
-            "BERRYSTUDIO / " AS_VERSION);
-    ui_text_right(u, as_rect(W - 420, 14, 250, 16), FONT_SMALL,
-                  m->capture ? g_pal.warn : g_pal.good,
-                  m->capture ? "CAPTURE · INPUT" : "SYNTHETIC SOURCE");
-    ui_text_right(u, as_rect(W - 420, 34, 250, 14), FONT_SMALL,
-                  g_pal.text_faint, m->device.c_str());
-    if (ui_button(u, 900, as_rect(W - 150, 16, 62, 30),
+    /* 品牌：标记 + 字标 + 机构/版本副行。字标是签名，不是 H1。 */
+    ui_dot(u, 30, 32, 9, g_pal.accent);
+    ui_dot(u, 30, 32, 3, g_pal.bg);
+    ui_text_baseline(u, 48, 29, FONT_BRAND, g_pal.text, "AUDIOSCOPE");
+    ui_text_baseline(u, 48, 45, FONT_MONO, g_pal.text_faint,
+                     "BERRYSTUDIO / " AS_VERSION);
+    ui_text_baseline_right(u, W - 272, 29, FONT_SMALL,
+                           m->capture ? g_pal.warn : g_pal.good,
+                           m->capture ? "CAPTURE · INPUT" : "SYNTHETIC SOURCE");
+    ui_text_baseline_right(u, W - 272, 45, FONT_SMALL, g_pal.text_faint,
+                           m->device.c_str());
+    if (ui_button(u, 900, as_rect(W - 152, 17, 64, 30),
                   m->light ? "LIGHT" : "DARK", BTN_GHOST)) {
         theme_toggle();
         m->light = theme_is_light();
     }
-    if (ui_button(u, 901, as_rect(W - 80, 16, 62, 30), "ABOUT", BTN_GHOST)) {
+    if (ui_button(u, 901, as_rect(W - 80, 17, 64, 30), "ABOUT", BTN_GHOST)) {
         m->message = AS_BRAND " " AS_VERSION;
     }
+    ui_line(u, 0, kHeaderH - 1, W, kHeaderH - 1, g_pal.line_soft, 1);
 }
 
 void draw_nav(UI *u, NativeModel *m) {
@@ -139,42 +150,63 @@ void draw_scope(UI *u, NativeModel *m, NativeActions *act) {
 
     y = ui_group(u, x, y + 58, w, "TIMEBASE");
     ui_text(u, x, y, FONT_VALUE, g_pal.text, "1.50 ms/div");
-    ui_text(u, x, y + 26, FONT_SMALL, g_pal.text_faint, "trigger: CH1 rising · 0.00 V");
+    ui_text_baseline(u, x, y + 34, FONT_SMALL, g_pal.text_faint,
+                     "trigger: CH1 rising · 0.00 V");
+
+    /* 左下角的常驻安全声明：空间不浪费，也符合"安全 > 功能"的排序。 */
+    double sy = l.y + l.h - 96;
+    ui_line(u, x, sy - 12, x + w, sy - 12, g_pal.line_soft, 1);
+    ui_text_baseline(u, x, sy + 6, FONT_LABEL, g_pal.text_faint, "SAFETY");
+    ui_text_baseline(u, x, sy + 28, FONT_SMALL, g_pal.text_dim,
+                     "software cannot protect");
+    ui_text_baseline(u, x, sy + 46, FONT_SMALL, g_pal.text_dim,
+                     "the sound card.");
+    ui_text_baseline(u, x, sy + 66, FONT_SMALL, g_pal.text_faint,
+                     "use a protected front end");
 
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "TIME DOMAIN", "CH1 · 48 kHz · 15 ms window");
-    ASRect plot = as_rect(c.x + PAD + 24, c.y + 48, c.w - PAD * 2 - 40, c.h - 96);
-    mat_recessed(u, plot, 4);
+    /* 左侧留 34px 给 Y 轴刻度：刻度不压曲线（图表安全区规则）。 */
+    ASRect plot = as_rect(c.x + PAD + 34, c.y + 48, c.w - PAD * 2 - 44, c.h - 96);
+    ui_plot(u, plot, 4);
     plot_grid(u, plot, 10, 8);
     double mid = plot.y + plot.h * 0.5;
     ui_line(u, plot.x, mid, plot.x + plot.w, mid, g_pal.chart_axis, 1);
 
-    if (!m->wave.empty()) {
+    if (m->wave.size() > 1) {
         int n = (int)m->wave.size();
-        double px = 0, py = 0;
-        for (int i = 0; i < n; ++i) {
-            double tx = plot.x + plot.w * (double)i / (double)(n - 1);
-            double v = std::clamp((double)m->wave[(size_t)i] / 1.0, -1.0, 1.0);
-            double ty = mid - v * plot.h * 0.44;
-            if (i) ui_line(u, px, py, tx, ty, g_pal.curve_main, 1.4);
-            px = tx;
-            py = ty;
-        }
+        ui_polyline_f(u, plot.x, plot.w / (double)(n - 1), m->wave.data(), n,
+                      mid, plot.h * 0.44, g_pal.curve_main, 1.4);
     }
     double dash[2] = {4, 4};
     ui_line_dash(u, plot.x + plot.w * 0.5, plot.y, plot.x + plot.w * 0.5,
                  plot.y + plot.h, g_pal.warn, 1, dash, 2);
-    ui_text_right(u, as_rect(plot.x, plot.y + plot.h + 4, plot.w, 14), FONT_SMALL,
-                  g_pal.text_faint, "15.0 ms  ·  10 div  ·  −1.0 … +1.0 FS");
+
+    /* Y 轴：±1.0 FS / 0；X 轴：0 / 7.5 / 15 ms。 */
+    ui_text_baseline_right(u, plot.x - 6, plot.y + 12, FONT_SMALL,
+                           g_pal.text_faint, "+1.0");
+    ui_text_baseline_right(u, plot.x - 6, mid + 4, FONT_SMALL,
+                           g_pal.text_faint, "0");
+    ui_text_baseline_right(u, plot.x - 6, plot.y + plot.h - 2, FONT_SMALL,
+                           g_pal.text_faint, "\xe2\x88\x92" "1.0");
+    double bottom = plot.y + plot.h + 18;
+    ui_text_baseline(u, plot.x, bottom, FONT_SMALL, g_pal.text_faint, "0");
+    const char *midlab = "7.5 ms";
+    double mw = ui_text_width(u, FONT_SMALL, midlab);
+    ui_text_baseline(u, plot.x + plot.w * 0.5 - mw * 0.5, bottom, FONT_SMALL,
+                     g_pal.text_faint, midlab);
+    ui_text_baseline_right(u, plot.x + plot.w, bottom, FONT_SMALL,
+                           g_pal.text_faint, "15 ms");
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD;
     double rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "INPUT PEAK · CH1");
-    ui_text(u, rx, r.y + 30, FONT_CRIT, g_pal.accent,
-            fmt(as_linear_to_db(m->stats.peak), 1) + " dBFS");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint,
+                     "INPUT PEAK · CH1");
+    ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, g_pal.accent,
+                     (fmt(as_linear_to_db(m->stats.peak), 1) + " dBFS").c_str());
     double yy = r.y + 78;
     label_value(u, rx, yy, rw, "RMS", fmt(as_linear_to_db(m->stats.rms), 1) + " dBFS", g_pal.text);
     label_value(u, rx, yy + 26, rw, "FREQUENCY", fmt(m->stats.freq, 1) + " Hz", g_pal.text);
@@ -208,8 +240,8 @@ void draw_spectrum(UI *u, NativeModel *m, NativeActions *act) {
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "SPECTRUM", "Hann · 4096 · 20 Hz – 20 kHz");
-    ASRect p = as_rect(c.x + PAD + 32, c.y + 48, c.w - PAD * 2 - 48, c.h - 96);
-    mat_recessed(u, p, 4);
+    ASRect p = as_rect(c.x + PAD + 40, c.y + 48, c.w - PAD * 2 - 56, c.h - 96);
+    ui_plot(u, p, 4);
     for (int i = 0; i <= 5; ++i)
         ui_line(u, p.x, p.y + p.h * (double)i / 5.0, p.x + p.w,
                 p.y + p.h * (double)i / 5.0, g_pal.chart_grid, 1);
@@ -217,25 +249,37 @@ void draw_spectrum(UI *u, NativeModel *m, NativeActions *act) {
         ui_line(u, p.x + p.w * (double)i / 4.0, p.y, p.x + p.w * (double)i / 4.0,
                 p.y + p.h, g_pal.chart_grid, 1);
 
-    if (!m->spec_db.empty()) {
+    if (m->spec_db.size() > 1) {
         int n = (int)m->spec_db.size();
-        double px = 0, py = 0;
-        for (int i = 0; i < n; ++i) {
-            double tx = p.x + p.w * (double)i / (double)(n - 1);
-            double ty = db_to_y(m->spec_db[(size_t)i], p);
-            if (i) ui_line(u, px, py, tx, ty, g_pal.curve_main, 1.3);
-            px = tx;
-            py = ty;
-        }
+        /* 0 dBFS 在顶部、−100 dB 在底部：y = p.y − db × (p.h/100) */
+        ui_polyline_d(u, p.x, p.w / (double)(n - 1), m->spec_db.data(), n,
+                      p.y, p.h * 0.01, g_pal.curve_main, 1.3);
     }
-    ui_text_right(u, as_rect(p.x, p.y + p.h + 4, p.w, 14), FONT_SMALL,
-                  g_pal.text_faint, "20 Hz                       1 kHz                       20 kHz");
+    /* Y 轴 dB 刻度（0 / −20 … −100）放在左侧安全区外。 */
+    for (int i = 0; i <= 5; ++i) {
+        char lab[16];
+        if (i == 0) std::snprintf(lab, sizeof(lab), "0");
+        else std::snprintf(lab, sizeof(lab), "\xe2\x88\x92%d", i * 20);
+        ui_text_baseline_right(u, p.x - 6, p.y + p.h * (double)i / 5.0 + 4,
+                               FONT_SMALL, g_pal.text_faint, lab);
+    }
+    /* X 轴三个有意义的点：20 Hz / 1 kHz / 20 kHz。 */
+    double bottom = p.y + p.h + 18;
+    ui_text_baseline(u, p.x, bottom, FONT_SMALL, g_pal.text_faint, "20 Hz");
+    const char *midlab = "1 kHz";
+    double mw = ui_text_width(u, FONT_SMALL, midlab);
+    ui_text_baseline(u, p.x + p.w * 0.5 - mw * 0.5, bottom, FONT_SMALL,
+                     g_pal.text_faint, midlab);
+    ui_text_baseline_right(u, p.x + p.w, bottom, FONT_SMALL, g_pal.text_faint,
+                           "20 kHz");
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD, rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "TOTAL HARMONIC DISTORTION");
-    ui_text(u, rx, r.y + 30, FONT_CRIT, g_pal.accent, fmt(m->tone.thd_pct, 3) + " %");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint,
+                     "TOTAL HARMONIC DISTORTION");
+    ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, g_pal.accent,
+                     (fmt(m->tone.thd_pct, 3) + " %").c_str());
     double yy = r.y + 78;
     label_value(u, rx, yy, rw, "THD+N", fmt(m->tone.thdn_pct, 3) + " %", g_pal.text);
     label_value(u, rx, yy + 26, rw, "SNR", fmt(m->tone.snr_db, 1) + " dB", g_pal.text);
@@ -264,7 +308,7 @@ void draw_xy(UI *u, NativeModel *m, NativeActions *act) {
     title_block(u, c, "PHASE / XY", "Lissajous · CH1 vs CH2");
     double size = std::min(c.w - PAD * 4, c.h - 96);
     ASRect p = as_rect(c.x + (c.w - size) * 0.5, c.y + 48, size, size);
-    mat_recessed(u, p, 4);
+    ui_plot(u, p, 4);
     for (int i = 1; i < 4; ++i) {
         ui_line(u, p.x + p.w * i / 4.0, p.y, p.x + p.w * i / 4.0, p.y + p.h,
                 g_pal.chart_grid, 1);
@@ -273,19 +317,19 @@ void draw_xy(UI *u, NativeModel *m, NativeActions *act) {
     }
     ui_line(u, p.x, p.y + p.h * 0.5, p.x + p.w, p.y + p.h * 0.5, g_pal.chart_axis, 1);
     ui_line(u, p.x + p.w * 0.5, p.y, p.x + p.w * 0.5, p.y + p.h, g_pal.chart_axis, 1);
-    if (m->xy_x.size() == m->xy_y.size()) {
-        for (size_t i = 0; i < m->xy_x.size(); ++i) {
-            double tx = p.x + p.w * 0.5 + (double)m->xy_x[i] * p.w * 0.45;
-            double ty = p.y + p.h * 0.5 - (double)m->xy_y[i] * p.h * 0.45;
-            ui_dot(u, tx, ty, 1.3, as_alpha(g_pal.accent, 0.45));
-        }
+    if (m->xy_x.size() == m->xy_y.size() && m->xy_x.size() > 1) {
+        /* 连通轨迹比 512 个独立圆点快得多，Lissajous 的形状也更连续。 */
+        ui_path_xy_f(u, m->xy_x.data(), m->xy_y.data(), (int)m->xy_x.size(),
+                     p.x + p.w * 0.5, p.y + p.h * 0.5, p.w * 0.45,
+                     p.h * 0.45, as_alpha(g_pal.accent, 0.55), 1.1);
     }
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD, rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "PHASE");
-    ui_text(u, rx, r.y + 30, FONT_CRIT, g_pal.accent, fmt(m->phase_deg, 1) + "°");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint, "PHASE");
+    ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, g_pal.accent,
+                     (fmt(m->phase_deg, 1) + "°").c_str());
     double yy = r.y + 78;
     label_value(u, rx, yy, rw, "GAIN", fmt_signed(m->gain_db, 2) + " dB", g_pal.text);
     label_value(u, rx, yy + 26, rw, "FREQUENCY", fmt(m->stats.freq, 1) + " Hz", g_pal.text);
@@ -312,35 +356,66 @@ void draw_measure(UI *u, NativeModel *m, NativeActions *act) {
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "CHANNEL MEASUREMENTS", "8 channels · current frame");
+    /* 表格用固定列坐标，表头与数值共用一条右对齐基线：比例字体表头和等宽
+     * 数值不会再错位（0.9 之前表头是拼空格拼出来的）。 */
     double tx = c.x + PAD + 8;
+    double tw = c.w - PAD * 2 - 16;
+    double right = c.x + c.w - PAD;
     double ty = c.y + 52;
-    const char *head = "CH        PEAK dBFS     RMS dBFS      FREQ Hz       Vpp FS    CLIP";
-    ui_text(u, tx, ty, FONT_SMALL, g_pal.text_faint, head);
-    ui_line(u, c.x + PAD, ty + 20, c.x + c.w - PAD, ty + 20, g_pal.line_soft, 1);
+    double hb = ty + 11;
+    const double col_peak = tx + tw * 0.22;
+    const double col_rms = tx + tw * 0.40;
+    const double col_freq = tx + tw * 0.60;
+    const double col_vpp = tx + tw * 0.76;
+    const double col_clip = tx + tw * 0.87;
+    ui_text_baseline(u, tx, hb, FONT_SMALL, g_pal.text_faint, "CH");
+    ui_text_baseline_right(u, col_peak, hb, FONT_SMALL, g_pal.text_faint,
+                           "PEAK dBFS");
+    ui_text_baseline_right(u, col_rms, hb, FONT_SMALL, g_pal.text_faint,
+                           "RMS dBFS");
+    ui_text_baseline_right(u, col_freq, hb, FONT_SMALL, g_pal.text_faint,
+                           "FREQ Hz");
+    ui_text_baseline_right(u, col_vpp, hb, FONT_SMALL, g_pal.text_faint,
+                           "Vpp FS");
+    ui_text_baseline_right(u, col_clip, hb, FONT_SMALL, g_pal.text_faint,
+                           "CLIP");
+    ui_line(u, c.x + PAD, ty + 20, right, ty + 20, g_pal.line_soft, 1);
     for (int i = 0; i < 8; ++i) {
         double yy = ty + 32 + i * 34;
+        double rb = yy + 12;
         const NativeChannel &ch = m->ch[i];
-        char line[160];
+        std::string name = "CH" + std::to_string(i + 1);
+        const uint32_t col = ch.active ? g_pal.text : g_pal.text_faint;
+        ui_text_baseline(u, tx, rb, FONT_MONO, col, name.c_str());
         if (ch.active) {
-            std::snprintf(line, sizeof(line), "CH%d      %8.1f     %8.1f     %8.1f     %8.3f      %d",
-                          i + 1, ch.peak_db, ch.rms_db, ch.freq, ch.vpp, ch.clip);
-            ui_text(u, tx, yy, FONT_MONO, g_pal.text, line);
-            ui_text_right(u, as_rect(tx, yy - 2, c.w - PAD * 2 - 16, 18), FONT_SMALL,
-                          g_pal.good, "PASS");
+            ui_text_baseline_right(u, col_peak, rb, FONT_MONO, g_pal.text,
+                                   fmt(ch.peak_db, 1).c_str());
+            ui_text_baseline_right(u, col_rms, rb, FONT_MONO, g_pal.text,
+                                   fmt(ch.rms_db, 1).c_str());
+            ui_text_baseline_right(u, col_freq, rb, FONT_MONO, g_pal.text,
+                                   fmt(ch.freq, 1).c_str());
+            ui_text_baseline_right(u, col_vpp, rb, FONT_MONO, g_pal.text,
+                                   fmt(ch.vpp, 3).c_str());
+            ui_text_baseline_right(u, col_clip, rb, FONT_MONO, g_pal.text,
+                                   std::to_string(ch.clip).c_str());
+            ui_text_baseline_right(u, right, rb, FONT_SMALL, g_pal.good, "PASS");
         } else {
-            std::snprintf(line, sizeof(line), "CH%d            —          —          —          —      —", i + 1);
-            ui_text(u, tx, yy, FONT_MONO, g_pal.text_faint, line);
+            ui_text_baseline_right(u, col_peak, rb, FONT_MONO, g_pal.text_faint, "—");
+            ui_text_baseline_right(u, col_rms, rb, FONT_MONO, g_pal.text_faint, "—");
+            ui_text_baseline_right(u, col_freq, rb, FONT_MONO, g_pal.text_faint, "—");
+            ui_text_baseline_right(u, col_vpp, rb, FONT_MONO, g_pal.text_faint, "—");
+            ui_text_baseline_right(u, col_clip, rb, FONT_MONO, g_pal.text_faint, "—");
         }
         if (i < 7)
-            ui_line(u, c.x + PAD, yy + 24, c.x + c.w - PAD, yy + 24, g_pal.line_soft, 1);
+            ui_line(u, c.x + PAD, yy + 24, right, yy + 24, g_pal.line_soft, 1);
     }
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD, rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "VERDICT");
-    ui_text(u, rx, r.y + 30, FONT_CRIT, m->clip ? g_pal.bad : g_pal.good,
-            m->clip ? "FAIL" : "PASS");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint, "VERDICT");
+    ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, m->clip ? g_pal.bad : g_pal.good,
+                     m->clip ? "FAIL" : "PASS");
     double yy = r.y + 78;
     label_value(u, rx, yy, rw, "ACTIVE", "2 / 8", g_pal.text);
     label_value(u, rx, yy + 26, rw, "CLIP", m->clip ? "latched" : "0", g_pal.text);
@@ -371,28 +446,46 @@ void draw_repair(UI *u, NativeModel *m, NativeActions *act) {
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "REPAIR PLAN — TAPE", "thresholds are advisory");
     double tx = c.x + PAD + 8, ty = c.y + 56;
-    ui_text(u, tx, ty, FONT_SMALL, g_pal.text_faint, "STEP                VALUE        UNIT        RESULT");
-    ui_line(u, c.x + PAD, ty + 20, c.x + c.w - PAD, ty + 20, g_pal.line_soft, 1);
+    double tw = c.w - PAD * 2 - 16;
+    double right = c.x + c.w - PAD;
+    double col_val = tx + tw * 0.46;
+    double col_unit = tx + tw * 0.60;
+    ui_text_baseline(u, tx, ty + 11, FONT_SMALL, g_pal.text_faint, "STEP");
+    ui_text_baseline_right(u, col_val, ty + 11, FONT_SMALL, g_pal.text_faint,
+                           "VALUE");
+    ui_text_baseline(u, col_unit, ty + 11, FONT_SMALL, g_pal.text_faint,
+                     "UNIT");
+    ui_text_baseline_right(u, right, ty + 11, FONT_SMALL, g_pal.text_faint,
+                           "RESULT");
+    ui_line(u, c.x + PAD, ty + 20, right, ty + 20, g_pal.line_soft, 1);
     for (size_t i = 0; i < m->plan.size(); ++i) {
         const NativePlanStep &s = m->plan[i];
         double yy = ty + 34 + (double)i * 40.0;
-        char line[192];
-        std::snprintf(line, sizeof(line), "%-18s %10.4f    %-10s  %s", s.label.c_str(),
-                      s.value, s.unit.c_str(), s.pass ? "PASS" : "FAIL");
-        ui_text(u, tx, yy, FONT_MONO, s.pass ? g_pal.text : g_pal.bad, line);
+        double rb = yy + 12;
+        ui_text_baseline(u, tx, rb, FONT_MONO, g_pal.text, s.label.c_str());
+        ui_text_baseline_right(u, col_val, rb, FONT_MONO, g_pal.text,
+                               fmt(s.value, 4).c_str());
+        ui_text_baseline(u, col_unit, rb, FONT_MONO, g_pal.text_faint,
+                         s.unit.c_str());
+        ui_text_baseline_right(u, right, rb, FONT_SMALL,
+                               s.pass ? g_pal.good : g_pal.bad,
+                               s.pass ? "PASS" : "FAIL");
+        if (i + 1 < m->plan.size())
+            ui_line(u, c.x + PAD, yy + 26, right, yy + 26, g_pal.line_soft, 1);
     }
     if (!m->plan_ran) {
-        ui_text(u, tx, ty + 40, FONT_SMALL, g_pal.text_faint,
-                "Run the plan to fill in wow / flutter / azimuth / THD.");
+        ui_text_baseline(u, tx, ty + 52, FONT_SMALL, g_pal.text_faint,
+                         "Run the plan to fill in wow / flutter / azimuth / THD.");
     }
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD, rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "PLAN VERDICT");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint,
+                     "PLAN VERDICT");
     bool pass = m->plan_ran ? m->plan_pass : true;
-    ui_text(u, rx, r.y + 30, FONT_CRIT, pass ? g_pal.good : g_pal.bad,
-            m->plan_ran ? (pass ? "PASS" : "FAIL") : "—");
+    ui_text_baseline(u, rx, r.y + 54, FONT_CRIT, pass ? g_pal.good : g_pal.bad,
+                     m->plan_ran ? (pass ? "PASS" : "FAIL") : "—");
     if (ui_button(u, 301, as_rect(rx, r.y + 96, rw, 32), "EXPORT PDF", BTN_NORMAL))
         act->export_report = true;
     ui_text(u, rx, r.y + 140, FONT_SMALL, g_pal.text_faint, "writes PDF + JSON + HTML");
@@ -421,28 +514,62 @@ void draw_reports(UI *u, NativeModel *m, NativeActions *act) {
     ASRect c = center_card();
     mat_raised(u, c, RADIUS_CARD);
     title_block(u, c, "REPORTS", "most recent first");
+    double tx = c.x + PAD + 8;
+    double tw = c.w - PAD * 2 - 16;
+    double right = c.x + c.w - PAD;
     double ty = c.y + 56;
-    ui_text(u, c.x + PAD + 8, ty, FONT_SMALL, g_pal.text_faint, "FILE                                KIND          TIME        RESULT");
-    ui_line(u, c.x + PAD, ty + 20, c.x + c.w - PAD, ty + 20, g_pal.line_soft, 1);
+    double col_kind = tx + tw * 0.50;
+    double col_time = tx + tw * 0.78;
+    ui_text_baseline(u, tx, ty + 11, FONT_SMALL, g_pal.text_faint, "FILE");
+    ui_text_baseline(u, col_kind, ty + 11, FONT_SMALL, g_pal.text_faint, "KIND");
+    ui_text_baseline_right(u, col_time, ty + 11, FONT_SMALL, g_pal.text_faint,
+                           "TIME");
+    ui_text_baseline_right(u, right, ty + 11, FONT_SMALL, g_pal.text_faint,
+                           "RESULT");
+    ui_line(u, c.x + PAD, ty + 20, right, ty + 20, g_pal.line_soft, 1);
     if (m->reports.empty()) {
-        ui_text(u, c.x + PAD + 8, ty + 42, FONT_SMALL, g_pal.text_faint,
-                "No reports yet. Export one from the repair page or the button →");
+        /* 空状态：发生了什么 / 为什么 / 下一步，三行以内（BERRY-UI-SPEC §6.6）。 */
+        double bw = 56, bh = 56;
+        double bx = c.x + (c.w - bw) * 0.5;
+        double by = c.y + c.h * 0.42;
+        ui_fill_round(u, as_rect(bx, by, bw, bh), 6, g_pal.card_alt);
+        ui_stroke_round(u, as_rect(bx, by, bw, bh), 6, g_pal.line_soft, 1);
+        ui_line(u, bx + 16, by + 28, bx + 40, by + 28, g_pal.text_faint, 1);
+        ui_line(u, bx + 16, by + 34, bx + 32, by + 34, g_pal.text_faint, 1);
+        const char *l1 = "No reports yet";
+        const char *l2 = "Export one from the repair page or the button on the right.";
+        const char *l3 = "Reports stay on this machine; nothing is uploaded.";
+        double w1 = ui_text_width(u, FONT_LABEL, l1);
+        double w2 = ui_text_width(u, FONT_SMALL, l2);
+        double w3 = ui_text_width(u, FONT_SMALL, l3);
+        ui_text_baseline(u, c.x + (c.w - w1) * 0.5, by + bh + 26, FONT_LABEL,
+                         g_pal.text, l1);
+        ui_text_baseline(u, c.x + (c.w - w2) * 0.5, by + bh + 46, FONT_SMALL,
+                         g_pal.text_dim, l2);
+        ui_text_baseline(u, c.x + (c.w - w3) * 0.5, by + bh + 64, FONT_SMALL,
+                         g_pal.text_faint, l3);
     }
     for (size_t i = 0; i < m->reports.size(); ++i) {
-        const NativeReport &r = m->reports[i];
+        const NativeReport &rep = m->reports[i];
         double yy = ty + 36 + (double)i * 34.0;
-        char line[192];
-        std::snprintf(line, sizeof(line), "%-34s %-12s  %-10s  %s", r.name.c_str(),
-                      r.kind.c_str(), r.time.c_str(), r.pass ? "PASS" : "WARN");
-        ui_text(u, c.x + PAD + 8, yy, FONT_MONO, g_pal.text, line);
+        double rb = yy + 12;
+        ui_text_ellipsis(u, as_rect(tx, yy, col_kind - tx - 12, 18), FONT_MONO,
+                         g_pal.text, rep.name.c_str());
+        ui_text_baseline(u, col_kind, rb, FONT_MONO, g_pal.text_dim,
+                         rep.kind.c_str());
+        ui_text_baseline_right(u, col_time, rb, FONT_MONO, g_pal.text_dim,
+                               rep.time.c_str());
+        ui_text_baseline_right(u, right, rb, FONT_SMALL,
+                               rep.pass ? g_pal.good : g_pal.warn,
+                               rep.pass ? "PASS" : "WARN");
         if (i + 1 < m->reports.size())
-            ui_line(u, c.x + PAD, yy + 24, c.x + c.w - PAD, yy + 24, g_pal.line_soft, 1);
+            ui_line(u, c.x + PAD, yy + 24, right, yy + 24, g_pal.line_soft, 1);
     }
 
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD, rw = r.w - PAD * 2;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "EXPORT");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint, "EXPORT");
     if (ui_button(u, 350, as_rect(rx, r.y + 34, rw, 34), "EXPORT REPORT", BTN_PRIMARY))
         act->export_report = true;
     ui_text(u, rx, r.y + 84, FONT_SMALL, g_pal.text_faint, "no network · local files");
@@ -484,23 +611,31 @@ void draw_calibration(UI *u, NativeModel *m, NativeActions *act) {
     ASRect r = right_card();
     mat_raised(u, r, RADIUS_CARD);
     double rx = r.x + PAD;
-    ui_text(u, rx, r.y + 14, FONT_SMALL, g_pal.text_faint, "SAFETY");
-    ui_text(u, rx, r.y + 34, FONT_SMALL, g_pal.text_dim, "software cannot protect");
-    ui_text(u, rx, r.y + 52, FONT_SMALL, g_pal.text_dim, "the sound card.");
-    ui_text(u, rx, r.y + 78, FONT_SMALL, g_pal.text_faint, "use a protected front end");
-    ui_text(u, rx, r.y + 96, FONT_SMALL, g_pal.text_faint, "for unknown or high levels.");
+    ui_text_baseline(u, rx, r.y + 22, FONT_SMALL, g_pal.text_faint, "SAFETY");
+    ui_text_baseline(u, rx, r.y + 44, FONT_SMALL, g_pal.text_dim,
+                     "software cannot protect");
+    ui_text_baseline(u, rx, r.y + 62, FONT_SMALL, g_pal.text_dim,
+                     "the sound card.");
+    ui_text_baseline(u, rx, r.y + 88, FONT_SMALL, g_pal.text_faint,
+                     "use a protected front end");
+    ui_text_baseline(u, rx, r.y + 106, FONT_SMALL, g_pal.text_faint,
+                     "for unknown or high levels.");
 }
 
 void draw_footer(UI *u, NativeModel *m) {
     ui_line(u, 0, H - kFooterH, W, H - kFooterH, g_pal.line_soft, 1);
+    double baseline = H - kFooterH + 21;
     char left[160];
     std::snprintf(left, sizeof(left), "%s · %.0f Hz · %d ch · %s", m->capture ? "INPUT" : "SYNTHETIC",
                   m->fs, m->channels, m->hold ? "HOLD" : "LIVE");
-    ui_text(u, PAD, H - kFooterH + 9, FONT_SMALL, g_pal.text_faint, left);
-    ui_text_center(u, as_rect(0, H - kFooterH + 9, W, 14), FONT_SMALL,
-                   g_pal.text_faint, "BERRYSTUDIO / " AS_VERSION);
-    ui_text_right(u, as_rect(W - 420, H - kFooterH + 9, 404, 14), FONT_SMALL,
-                  g_pal.text_faint, m->message.c_str());
+    ui_text_baseline(u, PAD, baseline, FONT_MONO, g_pal.text_faint, left);
+    ui_text_baseline_right(u, W - PAD, baseline, FONT_MONO, g_pal.text_faint,
+                           m->message.c_str());
+    /* 品牌副行居中：用右对齐的逆运算不如直接量宽，保持真正的水平居中。 */
+    const char *brand = "BERRYSTUDIO / " AS_VERSION;
+    double bw = ui_text_width(u, FONT_MONO, brand);
+    ui_text_baseline(u, (W - bw) * 0.5, baseline, FONT_MONO, g_pal.text_faint,
+                     brand);
 }
 
 } // namespace

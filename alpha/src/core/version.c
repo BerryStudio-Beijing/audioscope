@@ -1,4 +1,4 @@
-/* AudioScope by BerryStudio 0.7-alpha — version and status strings. */
+/* AudioScope by BerryStudio 0.9.1-beta — version and status strings. */
 #include "core/api.h"
 
 const char *as_brand_string(void) {

@@ -11,7 +11,7 @@
 - **代码基线**：AudioScope 1.1，macOS 12+ / arm64 / 纯 C11 / Apache-2.0。
 - **目标平台**：macOS 12+ arm64 + Windows 10/11 x64。
 - **语言**：C11 实时核心 + C++17 应用/平台层；macOS 用 Objective-C++ 桥接。
-- **当前目标**：0.7-alpha Precision Instrument UI（MasterLens 设计标准）；0.8-alpha 再做原生 Canvas/WASAPI/实时桥/真实 DUT 闭环。
+- **当前目标**：0.9.1-beta 原生界面（Precision Instrument）；下一步 WASAPI、设备选择、游标缩放、校准向导与 Windows 真机验证。
 - **核心用户**：初学者、独立维修技师、音频硬件开发者、教学者。
 
 产品原则：**安全 > 可信 > 工作流 > 报告 > 双端一致性 > 价格**。

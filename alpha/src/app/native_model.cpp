@@ -48,11 +48,26 @@ NativeEngine::NativeEngine() {
     hist_.assign((size_t)kFftSize, 0.0f);
     xy1_.assign((size_t)kFftSize, 0.0f);
     xy2_.assign((size_t)kFftSize, 0.0f);
+    /* 采集/合成缓冲只分配一次：0.9 的 tick() 每帧都构造 3 个 vector，
+     * 60 fps 下就是每秒 180 次堆分配。 */
+    a_.assign((size_t)kScopeSamples, 0.0f);
+    b_.assign((size_t)kScopeSamples, 0.0f);
+    inter_.assign((size_t)kScopeSamples * 8u, 0.0f);
     win_.resize((size_t)kFftSize);
     fft_re_.resize((size_t)kFftSize);
     mag_.resize((size_t)kFftSize / 2 + 1);
+    /* 对数频率 → bin 映射只算一次（原来每帧 220 次 pow + log）。 */
+    bin_idx_.resize((size_t)kSpecBins);
+    bin_freq_.resize((size_t)kSpecBins);
+    for (int i = 0; i < kSpecBins; ++i) {
+        double f = 20.0 * std::pow(1000.0, (double)i / (double)(kSpecBins - 1));
+        int bin = (int)std::lround(f * (double)kFftSize / 48000.0);
+        bin_idx_[(size_t)i] = std::clamp(bin, 1, kFftSize / 2 - 1);
+        bin_freq_[(size_t)i] = f;
+    }
     fft_ok_ = as_fft_init(&fft_, kFftSize) == 0;
     if (fft_ok_) as_window_hann(win_.data(), kFftSize);
+    slow_count_ = slow_div_;   /* 第一帧就给出频谱，不留空图 */
 }
 
 NativeEngine::~NativeEngine() {
@@ -92,30 +107,36 @@ void NativeEngine::push_audio(const float *ch1, const float *ch2, int n) {
 }
 
 void NativeEngine::tick(NativeModel *model, double dt) {
-    if (!model || model->hold) return;
     (void)dt;
+    if (!model || model->hold) return;
     model->frame++;
     model->seconds += (double)kScopeSamples / 48000.0;
 
     if (capture_ && audio_) {
-        std::vector<float> buf((size_t)kScopeSamples * (size_t)cap_channels_, 0.0f);
-        int got = as_audio_read((AsAudio *)audio_, buf.data(), kScopeSamples);
-        if (got > 0) {
-            std::vector<float> a((size_t)got), b((size_t)got);
+        const int want = kScopeSamples * cap_channels_;
+        if ((int)inter_.size() < want) inter_.assign((size_t)want, 0.0f);
+        int got = as_audio_read((AsAudio *)audio_, inter_.data(), kScopeSamples);
+        if (got > 0 && got <= kScopeSamples) {
             for (int i = 0; i < got; ++i) {
-                a[(size_t)i] = buf[(size_t)i * (size_t)cap_channels_];
-                b[(size_t)i] = cap_channels_ > 1
-                                   ? buf[(size_t)i * (size_t)cap_channels_ + 1]
-                                   : a[(size_t)i];
+                a_[(size_t)i] = inter_[(size_t)i * (size_t)cap_channels_];
+                b_[(size_t)i] = cap_channels_ > 1
+                                    ? inter_[(size_t)i * (size_t)cap_channels_ + 1]
+                                    : a_[(size_t)i];
             }
-            push_audio(a.data(), b.data(), got);
+            push_audio(a_.data(), b_.data(), got);
         }
     } else {
-        std::vector<float> a((size_t)kScopeSamples), b((size_t)kScopeSamples);
-        synth_frames(a.data(), b.data(), kScopeSamples);
-        push_audio(a.data(), b.data(), kScopeSamples);
+        synth_frames(a_.data(), b_.data(), kScopeSamples);
+        push_audio(a_.data(), b_.data(), kScopeSamples);
     }
+
     compute(model);
+    /* 波形/读数每帧更新；FFT、THD、相位按 1/3 降频（60 fps → 20 Hz）。
+     * 这三项各含一次 4096 点 FFT，是原来的主要开销。 */
+    if (++slow_count_ >= slow_div_) {
+        slow_count_ = 0;
+        compute_spectrum(model);
+    }
 }
 
 void NativeEngine::compute(NativeModel *model) {
@@ -125,36 +146,11 @@ void NativeEngine::compute(NativeModel *model) {
     for (float v : model->wave)
         if (std::fabs(v) >= 0.999f) { model->clip = 1; break; }
 
-    model->spec_freq.resize((size_t)kSpecBins);
-    model->spec_db.resize((size_t)kSpecBins);
-    if (fft_ok_) {
-        for (int i = 0; i < kFftSize; ++i)
-            fft_re_[(size_t)i] = (double)hist_[(size_t)i] * win_[(size_t)i];
-        as_fft_forward(&fft_, fft_re_.data(), mag_.data(), kFftSize);
-        double maxmag = 1e-12;
-        for (int i = 1; i < kFftSize / 2; ++i)
-            maxmag = std::max(maxmag, mag_[(size_t)i]);
-        for (int i = 0; i < kSpecBins; ++i) {
-            double f = 20.0 * std::pow(1000.0, (double)i / (double)(kSpecBins - 1));
-            int bin = (int)std::lround(f * (double)kFftSize / 48000.0);
-            bin = std::clamp(bin, 1, kFftSize / 2 - 1);
-            double db = 20.0 * std::log10(std::max(mag_[(size_t)bin] / maxmag, 1e-6));
-            model->spec_freq[(size_t)i] = f;
-            model->spec_db[(size_t)i] = std::max(db, -100.0);
-        }
-        as_tone_analyze(hist_.data(), kFftSize, 48000.0, &model->tone);
-    }
-
     model->xy_x.resize(512);
     model->xy_y.resize(512);
     for (int i = 0; i < 512; ++i) {
         model->xy_x[(size_t)i] = xy1_[(size_t)(kFftSize - 512 + i)];
         model->xy_y[(size_t)i] = xy2_[(size_t)(kFftSize - 512 + i)];
-    }
-    AsPhaseResult pr{};
-    if (as_phase_measure(hist_.data(), xy2_.data(), kFftSize, 48000.0, &pr) == 0) {
-        model->phase_deg = pr.phase_deg;
-        model->gain_db = pr.gain_db;
     }
 
     for (int c = 0; c < 8; ++c) model->ch[c] = NativeChannel{};
@@ -169,6 +165,32 @@ void NativeEngine::compute(NativeModel *model) {
     model->ch[1].rms_db = model->ch[0].rms_db - 0.9;
     model->ch[1].freq = model->ch[0].freq;
     model->ch[1].vpp = model->ch[0].vpp * 0.9;
+}
+
+void NativeEngine::compute_spectrum(NativeModel *model) {
+    if (!fft_ok_) return;
+    model->spec_freq.resize((size_t)kSpecBins);
+    model->spec_db.resize((size_t)kSpecBins);
+    for (int i = 0; i < kFftSize; ++i)
+        fft_re_[(size_t)i] = (double)hist_[(size_t)i] * win_[(size_t)i];
+    as_fft_forward(&fft_, fft_re_.data(), mag_.data(), kFftSize);
+    double maxmag = 1e-12;
+    for (int i = 1; i < kFftSize / 2; ++i)
+        maxmag = std::max(maxmag, mag_[(size_t)i]);
+    for (int i = 0; i < kSpecBins; ++i) {
+        double db = 20.0 *
+                    std::log10(std::max(mag_[(size_t)bin_idx_[(size_t)i]] / maxmag,
+                                        1e-6));
+        model->spec_freq[(size_t)i] = bin_freq_[(size_t)i];
+        model->spec_db[(size_t)i] = std::max(db, -100.0);
+    }
+    as_tone_analyze(hist_.data(), kFftSize, 48000.0, &model->tone);
+
+    AsPhaseResult pr{};
+    if (as_phase_measure(hist_.data(), xy2_.data(), kFftSize, 48000.0, &pr) == 0) {
+        model->phase_deg = pr.phase_deg;
+        model->gain_db = pr.gain_db;
+    }
 }
 
 void NativeEngine::update_xy(NativeModel *model) { (void)model; }

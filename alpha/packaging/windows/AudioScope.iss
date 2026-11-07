@@ -1,10 +1,10 @@
-; AudioScope by BerryStudio 0.9 — Inno Setup 6 installer.
+; AudioScope by BerryStudio 0.9.1-beta — Inno Setup 6 installer.
 ; Build from a directory that contains AudioScope.exe, the docs and this file:
 ;   ISCC.exe AudioScope.iss
 ; The release workflow does exactly that after the MSVC build.
 
 #define AppName "AudioScope by BerryStudio"
-#define AppVersion "0.9.0-alpha.1"
+#define AppVersion "0.9.1-beta.1"
 #define AppPublisher "BerryStudio"
 #define AppExe "AudioScope.exe"
 
@@ -18,7 +18,7 @@ DefaultDirName={autopf}\AudioScope
 DefaultGroupName=AudioScope
 DisableProgramGroupPage=yes
 OutputDir=.
-OutputBaseFilename=AudioScope-0.9.0-alpha.1-windows-x64-setup
+OutputBaseFilename=AudioScope-0.9.1-beta.1-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

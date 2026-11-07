@@ -18,7 +18,7 @@ static const Palette DARK = {
     /* inks（暗色下同主色） */
     0x819e90ff, 0xb19870ff, 0xc08278ff, 0x80989fff,
     /* chartBg   grid      axis      curveMain  curveHold  fill */
-    0x202425ff, 0x303637ff, 0x858f89ff, 0xd6dad6ff, 0x858f89ff, 0x819e90ff,
+    0x1a1d1eff, 0x303637ff, 0x858f89ff, 0xd6dad6ff, 0x858f89ff, 0x819e90ff,
     0x93aeb5ff, 0xa39fc4ff, 0xb19870ff, 0x0000008c,
 };
 

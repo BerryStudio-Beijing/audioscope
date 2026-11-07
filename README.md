@@ -4,29 +4,31 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%2012%2B%20arm64%20%7C%20Windows%2010%2F11%20x64-lightgrey.svg)](alpha/README.md)
-[![Status](https://img.shields.io/badge/status-0.9.0--alpha.1-orange.svg)](alpha/README.md)
+[![Status](https://img.shields.io/badge/status-0.9.1--beta.1-orange.svg)](alpha/README.md)
 
-> **0.9-alpha（Native）**：见 [`alpha/README.md`](alpha/README.md)。
-> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.9.md`](docs/plan/V0.9.md)。
+> **0.9.1-beta（Native）**：见 [`alpha/README.md`](alpha/README.md)。
+> 路线图：[`docs/plan/ROADMAP.md`](docs/plan/ROADMAP.md) · [`docs/plan/V0.9.1.md`](docs/plan/V0.9.1.md)。
 > 原 v1.1 保留在 tag `v1.1.0-initial`；0.1–0.6-alpha 保留在各自 tag。
 >
 > **English** — AudioScope by BerryStudio is a sound-card audio repair workstation:
 > a protected, calibrated, guided measurement flow for macOS and Windows.
-> 0.9-alpha removes the Web UI and ships native apps: a macOS `.app` (AppKit +
-> CoreGraphics) and an installable Windows build (Win32 + GDI+). Multi-page PDF
-> and a loopback measurement are included. v1.1 is preserved at tag
-> `v1.1.0-initial`.
+> 0.9.1-beta keeps the native apps (macOS `.app` with AppKit + CoreGraphics,
+> Windows Win32 + GDI+) and fixes the interaction layer: time-based tab
+> animation, proportional window scaling, 60 Hz refresh, cached text/colour
+> rendering, and a measurement surface that stays dark graphite in the light
+> theme. v1.1 is preserved at tag `v1.1.0-initial`.
 
 ---
 
-## 0.9-alpha at a glance
+## 0.9.1-beta at a glance
 
 | | |
 |---|---|
 | 定位 | 声卡音频维修工作台，不是通用示波器 |
 | 平台 | macOS 12+ arm64 · Windows 10/11 x64 |
 | 语言 | C11 实时核心 + C++17 应用/平台层 |
-| 当前版本 | `0.9.0-alpha.1`（Native） |
+| 当前版本 | `0.9.1-beta.1`（Native） |
+| 这一版 | 导航指示线时间缓动、窗口等比自适应、60 Hz、缓存渲染、浅色模式保持深石墨测量面、排印/表格/轴刻度统一、Windows 同步 |
 | 现在能做 | 原生 macOS `.app` / Windows 安装包、七页界面、多页 PDF、loopback、维修计划、THD/IMD、wow/flutter、串扰、阻抗、方位角、多通道、XY、热力图、校准 |
 | 还没做 | WASAPI、设备选择、校准向导、游标/缩放、签名/公证、Windows 真机音频验证 |
 | 安全 | 软件不能保护声卡；高压/未知信号必须经过受保护前端 |
@@ -37,7 +39,7 @@
 cd alpha
 make app          # macOS: build/AudioScope.app
 make mac          # CLI
-make test         # selftest + native --shot regression
+make test         # selftest + nav 动画回归 + native --shot
 make win          # Windows CLI cross-build (mingw-w64)
 # Windows native exe + installer are built by CI (MSVC + Inno Setup).
 ```

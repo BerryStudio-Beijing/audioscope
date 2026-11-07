@@ -161,7 +161,7 @@ const Palette PALETTE_DARK = {
     0xff819e90, /* info */
     0xffb19870, /* warn */
     0xffc08278, /* bad */
-    0xff202425, /* chart_bg */
+    0xff1a1d1e, /* chart_bg */
     0xff303637, /* chart_grid */
     0xff858f89, /* chart_axis */
     0xffd6dad6, /* curve_main */
@@ -196,7 +196,7 @@ const Palette PALETTE_LIGHT = {
 Palette g_pal = PALETTE_DARK;
 bool g_light = false;
 
-Argb plot_bg() { return g_light ? g_pal.chart_bg : g_pal.bg; }
+Argb plot_bg() { return g_pal.chart_bg; }
 
 /* --------------------------------------------------------------- app state */
 NativeEngine g_engine;
@@ -607,35 +607,92 @@ void draw_header(gd::Graphics &g) {
            BTN_GHOST);
 }
 
+/* 导航指示线：与 macOS 同一套语义——按时间缓动、从当前位置出发、
+ * reduce-motion（此处无系统开关，保持最短动画）不飞。 */
+struct NavAnim {
+    float x = -1.0f;
+    float w = 0.0f;
+    float from_x = 0.0f;
+    float to_x = 0.0f;
+    float from_w = 0.0f;
+    float to_w = 0.0f;
+    unsigned long long t0 = 0;
+    bool animating = false;
+    bool inited = false;
+};
+NavAnim g_nav;
+
 void draw_nav(gd::Graphics &g) {
     static const wchar_t *const labels[audioscope::PAGE_COUNT] = {
         L"波形", L"频谱", L"相位", L"测量", L"维修", L"报告", L"校准"};
 
     const float y = HEADER_H;
     float x = PAD;
+    float xs[audioscope::PAGE_COUNT];
+    float ws[audioscope::PAGE_COUNT];
     for (int i = 0; i < audioscope::PAGE_COUNT; ++i) {
         const std::wstring label(labels[i]);
-        const float w = text_width(g, FONT_LABEL, label) + 32.0f;
-        const Rect r = rect(x, y, w, NAV_H);
+        ws[i] = text_width(g, FONT_LABEL, label) + 32.0f;
+        xs[i] = x;
+        x += ws[i] + 4.0f;
+    }
+
+    float target_x = PAD, target_w = 0.0f;
+    if (g_model.page >= 0 && g_model.page < audioscope::PAGE_COUNT) {
+        target_x = xs[g_model.page] + ws[g_model.page] * 0.15f;
+        target_w = ws[g_model.page] * 0.70f;
+    }
+
+    const unsigned long long now = GetTickCount64();
+    if (!g_nav.inited) {
+        g_nav.x = target_x;
+        g_nav.w = target_w;
+        g_nav.to_x = target_x;
+        g_nav.to_w = target_w;
+        g_nav.inited = true;
+    } else if (std::fabs(target_x - g_nav.to_x) > 0.5f ||
+               std::fabs(target_w - g_nav.to_w) > 0.5f) {
+        g_nav.from_x = g_nav.x;
+        g_nav.from_w = g_nav.w;
+        g_nav.to_x = target_x;
+        g_nav.to_w = target_w;
+        g_nav.t0 = now;
+        g_nav.animating = true;
+    }
+    if (g_nav.animating) {
+        const float ms = static_cast<float>(now - g_nav.t0);
+        float k = ms / 140.0f;
+        if (k >= 1.0f) {
+            k = 1.0f;
+            g_nav.animating = false;
+        }
+        const float e = 1.0f - (1.0f - k) * (1.0f - k) * (1.0f - k);
+        g_nav.x = g_nav.from_x + (g_nav.to_x - g_nav.from_x) * e;
+        g_nav.w = g_nav.from_w + (g_nav.to_w - g_nav.from_w) * e;
+    } else {
+        g_nav.x = g_nav.to_x;
+        g_nav.w = g_nav.to_w;
+    }
+
+    for (int i = 0; i < audioscope::PAGE_COUNT; ++i) {
+        const std::wstring label(labels[i]);
+        const Rect r = rect(xs[i], y, ws[i], NAV_H);
         const bool selected = g_model.page == i;
         const bool hover = hit_test(r, g_mouse_x, g_mouse_y);
 
         if (hover && !selected)
-            fill_round(g, rect(x + 4.0f, y + 10.0f, w - 8.0f, NAV_H - 20.0f),
-                       4.0f, with_alpha(0xffffffffu, 0.04f));
+            fill_round(g, rect(r.x + 4.0f, y + 10.0f, r.w - 8.0f, NAV_H - 20.0f),
+                       4.0f, g_light ? with_alpha(0x00000000u, 0.05f)
+                                     : with_alpha(0xffffffffu, 0.04f));
         text_rect(g, r, FONT_LABEL,
                   selected ? g_pal.accent
                            : (hover ? g_pal.text : g_pal.text_faint),
                   label, TEXT_CENTER);
         add_hit(100 + i, r);
-        if (selected) {
-            const float ix = x + w * 0.15f;
-            const float iw = w * 0.70f;
-            fill_round(g, rect(ix, y + NAV_H - 2.0f, iw, 2.0f), 1.0f,
-                       g_pal.accent);
-        }
-        x += w + 4.0f;
     }
+    if (g_nav.w > 0.5f)
+        fill_round(g, rect(g_nav.x, y + NAV_H - 2.0f, g_nav.w, 2.0f), 1.0f,
+                   g_pal.accent);
     line(g, PAD, y + NAV_H - 1.0f, W - PAD, y + NAV_H - 1.0f,
          g_pal.line_soft, 1.0f);
 }
@@ -863,16 +920,20 @@ void draw_xy(gd::Graphics &g, NativeModel &m) {
     line(g, p.x + p.w * 0.5f, p.y, p.x + p.w * 0.5f, p.y + p.h,
          g_pal.chart_axis, 1.0f);
 
-    if (m.xy_x.size() == m.xy_y.size()) {
-        g.SetClip(gd::RectF(p.x, p.y, p.w, p.h), gd::CombineModeReplace);
-        gd::SolidBrush b{static_cast<gd::Color>(with_alpha(g_pal.accent, 0.45f))};
+    if (m.xy_x.size() == m.xy_y.size() && m.xy_x.size() > 1) {
+        /* 一条折线代替 512 个独立椭圆：Lissajous 更连续，60 fps 下也省得动。 */
+        std::vector<gd::PointF> pts;
+        pts.reserve(m.xy_x.size());
         for (size_t i = 0; i < m.xy_x.size(); ++i) {
             const float tx = p.x + p.w * 0.5f +
                              static_cast<float>(m.xy_x[i]) * p.w * 0.45f;
             const float ty = p.y + p.h * 0.5f -
                              static_cast<float>(m.xy_y[i]) * p.h * 0.45f;
-            g.FillEllipse(&b, tx - 1.3f, ty - 1.3f, 2.6f, 2.6f);
+            pts.push_back(gd::PointF(tx, ty));
         }
+        gd::Pen pen(gd::Color(with_alpha(g_pal.accent, 0.55f)), 1.1f);
+        g.SetClip(gd::RectF(p.x, p.y, p.w, p.h), gd::CombineModeReplace);
+        g.DrawLines(&pen, pts.data(), static_cast<INT>(pts.size()));
         g.ResetClip();
     }
 
@@ -1474,7 +1535,7 @@ LRESULT CALLBACK window_proc(HWND hwnd, UINT message, WPARAM wParam,
 
     case WM_TIMER:
         if (wParam == 1) {
-            g_engine.tick(&g_model, 1.0 / 30.0);
+            g_engine.tick(&g_model, 1.0 / 60.0);
             if (!IsIconic(hwnd)) InvalidateRect(hwnd, nullptr, FALSE);
         }
         return 0;
@@ -1619,7 +1680,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line,
 
     ShowWindow(hwnd, show_command == 0 ? SW_SHOWNORMAL : show_command);
     UpdateWindow(hwnd);
-    SetTimer(hwnd, 1, 33, nullptr);
+    SetTimer(hwnd, 1, 16, nullptr);
 
     MSG message = {};
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {

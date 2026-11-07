@@ -5,6 +5,7 @@
 # Tests:  make test  -> selftest + scope/fft smoke
 
 BUILD := build
+VERSION := $(shell cat VERSION)
 
 MAC_CC ?= clang
 MAC_CXX ?= clang++
@@ -79,6 +80,9 @@ NATIVE_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(NATIVE_C)) \
                $(patsubst %.mm,$(BUILD)/mac/%.o,$(NATIVE_MM))
 MAC_TEST_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,$(TEST_C)) \
                  $(BUILD)/mac/src/core/ring.o
+NAV_TEST_OBJS := $(patsubst %.c,$(BUILD)/mac/%.o,tests/test_nav.c) \
+                 $(BUILD)/mac/src/ui/native_ui.o \
+                 $(BUILD)/mac/src/ui/native_theme.o
 WIN_LIB_OBJS := $(patsubst %.c,$(BUILD)/win/%.o,$(WIN_C))
 WIN_OBJS := $(WIN_LIB_OBJS) \
             $(patsubst %.cpp,$(BUILD)/win/%.o,$(APP_CXX))
@@ -92,7 +96,8 @@ OBJCFLAGS := -fobjc-arc -std=c++17 -O2 -Wall -Wextra -Isrc -mmacosx-version-min=
 WIN_LDFLAGS := -lwinmm -static -static-libgcc -static-libstdc++
 NATIVE_WIN_LDFLAGS := -mwindows -lwinmm -lgdiplus -lshell32 -static -static-libgcc -static-libstdc++
 
--include $(MAC_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) $(WIN_OBJS:.o=.d) $(MAC_TEST_OBJS:.o=.d)
+-include $(MAC_OBJS:.o=.d) $(NATIVE_OBJS:.o=.d) $(WIN_OBJS:.o=.d) \
+         $(MAC_TEST_OBJS:.o=.d) $(NAV_TEST_OBJS:.o=.d)
 
 .PHONY: all mac app win win-app test clean dist
 
@@ -130,6 +135,11 @@ $(BUILD)/audioscope-alpha-ringtest: $(MAC_TEST_OBJS)
 	@mkdir -p $(BUILD)
 	$(MAC_CXX) $(MAC_TEST_OBJS) -o $@ $(MAC_LDFLAGS)
 
+$(BUILD)/audioscope-alpha-navtest: $(NAV_TEST_OBJS)
+	@mkdir -p $(BUILD)
+	$(MAC_CXX) $(NAV_TEST_OBJS) -o $@ -framework CoreGraphics \
+		-framework CoreText -framework CoreFoundation -lm
+
 $(BUILD)/audioscope-alpha.exe: $(WIN_OBJS)
 	@mkdir -p $(BUILD)
 	$(WIN_CXX) $(WIN_OBJS) -o $@ $(WIN_LDFLAGS)
@@ -155,11 +165,12 @@ $(APP_BIN): $(MAC_LIB_OBJS) $(NATIVE_OBJS)
 	@codesign --force --deep --sign - $(APP_BUNDLE) >/dev/null 2>&1 || true
 	@echo "built $(APP_BUNDLE)"
 
-test: mac $(BUILD)/audioscope-alpha-ringtest app
+test: mac $(BUILD)/audioscope-alpha-ringtest $(BUILD)/audioscope-alpha-navtest app
 	./$(BUILD)/audioscope-alpha selftest
 	./$(BUILD)/audioscope-alpha scope > /dev/null
 	./$(BUILD)/audioscope-alpha fft > /dev/null
 	./$(BUILD)/audioscope-alpha-ringtest
+	./$(BUILD)/audioscope-alpha-navtest
 	rm -rf $(BUILD)/native-shots
 	$(APP_BIN) --shot $(BUILD)/native-shots
 	test -f $(BUILD)/native-shots/0_scope.png
@@ -171,8 +182,8 @@ dist: mac win
 	cp build/audioscope-alpha.exe dist/windows/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/macos/
 	cp README.md KNOWN-ISSUES.md CHANGELOG.md VERSION dist/windows/
-	cd dist/macos && zip -qr ../AudioScope-0.8.0-alpha.1-macos-arm64.zip .
-	cd dist/windows && zip -qr ../AudioScope-0.8.0-alpha.1-windows-x64.zip .
+	cd dist/macos && zip -qr ../AudioScope-$(VERSION)-macos-arm64.zip .
+	cd dist/windows && zip -qr ../AudioScope-$(VERSION)-windows-x64.zip .
 	@ls -lh dist/*.zip
 
 clean:

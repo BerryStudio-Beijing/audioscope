@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.9.0 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 0.9.1 LANGUAGES C CXX)
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -129,8 +129,8 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist"
         MACOSX_BUNDLE_BUNDLE_NAME "AudioScope"
         MACOSX_BUNDLE_GUI_IDENTIFIER "studio.berry.audioscope"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.9.0")
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.1"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.9.1")
     set_source_files_properties(
         src/platform/macos/native_app.mm src/platform/macos/native_main.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
@@ -159,5 +159,18 @@ add_test(NAME alpha_fft COMMAND audioscope-alpha fft)
 if(APPLE)
     add_test(NAME alpha_native_shot COMMAND AudioScope --shot
              "${CMAKE_CURRENT_BINARY_DIR}/native-shots")
+    # 导航指示线动画的回归测试（时间驱动 / 从当前位置出发 / reduce-motion）。
+    add_executable(alpha_nav_test
+        tests/test_nav.c
+        src/ui/native_ui.c
+        src/ui/native_theme.c)
+    target_include_directories(alpha_nav_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(alpha_nav_test PRIVATE
+        "-framework CoreGraphics" "-framework CoreText"
+        "-framework CoreFoundation")
+    if(NOT MSVC)
+        target_compile_options(alpha_nav_test PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME alpha_nav_indicator COMMAND alpha_nav_test)
 endif()
 
