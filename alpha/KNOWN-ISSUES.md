@@ -1,7 +1,14 @@
-# AudioScope by BerryStudio — 0.9.1-beta Known Issues
+# AudioScope by BerryStudio — 0.9.2-beta Known Issues
 
-> 版本：`0.9.1-beta.1` · 日期：2026-11-07
+> 版本：`0.9.2-beta.1` · 日期：2026-11-07
 > 这是 **原生 UI 预览版**，不能替代完整维修工作台。
+
+## 0.9.2 已修（相对 0.9.1）
+
+- **Windows**：读数用真减号 U+2212；示波器 ±1.0 / 0 / −1.0 与 0 / 7.5 / 15 ms
+  刻度；频谱 0…−100 dB 与 20 Hz / 1 kHz / 20 kHz 刻度；报告页空状态；
+  示波器页常驻安全声明；报告表列宽按卡片宽度比例；页眉/页脚统一等宽排印。
+- 更正：Windows 三张表原本就是列坐标实现（0.9.1 记录写错了）。
 
 ## 0.9.1 已修（相对 0.9.0-alpha.1）
 
@@ -41,5 +48,5 @@
 5. 真实 DUT 闭环与前后对比、曲线叠加。
 6. 签名/公证与安装包自动更新。
 7. 硬件前端参考设计。
-8. Windows 表格/排印对齐到 macOS 的列坐标与字距规则（本版只同步了测量面、
-   导航缓动与刷新率，Windows 表格仍是拼空格实现）。
+8. Windows 的逐字字距：GDI+ `DrawString` 不支持 letter-spacing，当前只在 macOS
+   生效；若必须一致，需要在 Windows 用逐字绘制或 DirectWrite（会牵动渲染架构）。

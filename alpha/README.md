@@ -1,7 +1,21 @@
-# AudioScope by BerryStudio — 0.9.1-beta (Native)
+# AudioScope by BerryStudio — 0.9.2-beta (Native)
 
-> **AudioScope by BerryStudio** · `0.9.1-beta.1` · macOS 12+ arm64 · Windows 10/11 x64
+> **AudioScope by BerryStudio** · `0.9.2-beta.1` · macOS 12+ arm64 · Windows 10/11 x64
 > C11 core + C++17 app · native AppKit/CoreGraphics + Win32/GDI+ · no Web UI
+
+## 0.9.2-beta 是什么
+
+0.9.2 把 0.9.1 在 macOS 上做的排版修正补到 Windows，功能范围不变：
+
+- **真减号**：Windows 读数使用 `−`（U+2212），不再出现 ASCII 连字符。
+- **轴刻度**：示波器 `+1.0 / 0 / −1.0` 与 `0 / 7.5 / 15 ms`；频谱
+  `0 … −100 dB` 与 `20 Hz / 1 kHz / 20 kHz`，刻在图表安全区外。
+- **空状态与常驻声明**：报告页三行空状态；示波器页左下安全声明。
+- **表格与页眉页脚**：报告表列宽按卡片比例；页眉品牌/版本/状态分三行对齐，
+  页脚三段统一等宽 Mono。
+
+> 限制：GDI+ 的 `DrawString` 不支持 letter-spacing，逐字字距只在 macOS 生效，
+> 已记录在 `KNOWN-ISSUES.md`。
 
 ## 0.9.1-beta 是什么
 

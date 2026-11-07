@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.9.1 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 0.9.2 LANGUAGES C CXX)
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -129,8 +129,8 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist"
         MACOSX_BUNDLE_BUNDLE_NAME "AudioScope"
         MACOSX_BUNDLE_GUI_IDENTIFIER "studio.berry.audioscope"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.1"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.9.1")
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.2"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.9.2")
     set_source_files_properties(
         src/platform/macos/native_app.mm src/platform/macos/native_main.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")

@@ -271,6 +271,13 @@ std::wstring widen(const std::string &s) {
     return out;
 }
 
+/* 真减号 U+2212：与 macOS 的排版规则一致，避免 ASCII 连字符出现在读数里。 */
+std::wstring pretty_minus(std::wstring s) {
+    for (wchar_t &c : s)
+        if (c == L'-') c = static_cast<wchar_t>(0x2212);
+    return s;
+}
+
 const std::wstring &app_version() {
     static const std::wstring v = widen(AS_VERSION);
     return v;
@@ -284,13 +291,13 @@ const std::wstring &app_brand() {
 std::wstring fmt(double value, int decimals) {
     wchar_t buf[64];
     std::swprintf(buf, 64, L"%.*f", decimals, value);
-    return std::wstring(buf);
+    return pretty_minus(std::wstring(buf));
 }
 
 std::wstring fmt_signed(double value, int decimals) {
     wchar_t buf[64];
     std::swprintf(buf, 64, L"%+.*f", decimals, value);
-    return std::wstring(buf);
+    return pretty_minus(std::wstring(buf));
 }
 
 gd::Font *make_font(const wchar_t *const *names, int count, float px) {
@@ -588,23 +595,26 @@ float db_to_y(double db, const Rect &p) {
 void draw_header(gd::Graphics &g) {
     fill_rect(g, 0.0f, 0.0f, W, HEADER_H, g_pal.bg);
 
-    dot(g, 30.0f, 26.0f, 9.0f, g_pal.accent);
-    dot(g, 30.0f, 26.0f, 3.0f, g_pal.bg);
-    text(g, 48.0f, 14.0f, FONT_BRAND, g_pal.text, L"AUDIOSCOPE");
-    text(g, 48.0f, 36.0f, FONT_SMALL, g_pal.text_faint,
-         std::wstring(L"BERRYSTUDIO / ") + app_version());
+    dot(g, 30.0f, 32.0f, 9.0f, g_pal.accent);
+    dot(g, 30.0f, 32.0f, 3.0f, g_pal.bg);
+    text_rect(g, rect(48.0f, 15.0f, 220.0f, 20.0f), FONT_BRAND, g_pal.text,
+              L"AUDIOSCOPE", TEXT_LEFT);
+    text_rect(g, rect(48.0f, 36.0f, 260.0f, 16.0f), FONT_MONO,
+              g_pal.text_faint,
+              std::wstring(L"BERRYSTUDIO / ") + app_version(), TEXT_LEFT);
 
-    text_rect(g, rect(W - 420.0f, 14.0f, 250.0f, 16.0f), FONT_SMALL,
+    text_rect(g, rect(W - 522.0f, 15.0f, 250.0f, 20.0f), FONT_SMALL,
               g_model.capture ? g_pal.warn : g_pal.good,
               g_model.capture ? L"CAPTURE · INPUT" : L"SYNTHETIC SOURCE",
               TEXT_RIGHT);
-    text_rect(g, rect(W - 420.0f, 34.0f, 250.0f, 16.0f), FONT_SMALL,
+    text_rect(g, rect(W - 522.0f, 36.0f, 250.0f, 16.0f), FONT_SMALL,
               g_pal.text_faint, widen(g_model.device), TEXT_RIGHT);
 
-    button(g, 900, rect(W - 150.0f, 16.0f, 62.0f, 30.0f),
+    button(g, 900, rect(W - 152.0f, 17.0f, 64.0f, 30.0f),
            g_model.light ? L"LIGHT" : L"DARK", BTN_GHOST);
-    button(g, 901, rect(W - 80.0f, 16.0f, 62.0f, 30.0f), L"ABOUT",
+    button(g, 901, rect(W - 80.0f, 17.0f, 64.0f, 30.0f), L"ABOUT",
            BTN_GHOST);
+    line(g, 0.0f, HEADER_H - 1.0f, W, HEADER_H - 1.0f, g_pal.line_soft, 1.0f);
 }
 
 /* 导航指示线：与 macOS 同一套语义——按时间缓动、从当前位置出发、
@@ -731,11 +741,22 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
     text(g, x, y + 26.0f, FONT_SMALL, g_pal.text_faint,
          L"trigger: CH1 rising · 0.00 V");
 
+    /* 左下角常驻安全声明：与 macOS 一致，空间不浪费。 */
+    const float sy = l.y + l.h - 96.0f;
+    line(g, x, sy - 12.0f, x + w, sy - 12.0f, g_pal.line_soft, 1.0f);
+    text(g, x, sy, FONT_LABEL, g_pal.text_faint, L"SAFETY");
+    text(g, x, sy + 22.0f, FONT_SMALL, g_pal.text_dim,
+         L"software cannot protect");
+    text(g, x, sy + 40.0f, FONT_SMALL, g_pal.text_dim, L"the sound card.");
+    text(g, x, sy + 60.0f, FONT_SMALL, g_pal.text_faint,
+         L"use a protected front end");
+
     Rect c = center_card();
     card(g, c);
     title_block(g, c, L"TIME DOMAIN", L"CH1 · 48 kHz · 15 ms window");
 
-    Rect plot = rect(c.x + PAD + 24.0f, c.y + 48.0f, c.w - PAD * 2.0f - 40.0f,
+    /* 左侧 34px 安全区放 Y 轴刻度，刻度不压曲线。 */
+    Rect plot = rect(c.x + PAD + 34.0f, c.y + 48.0f, c.w - PAD * 2.0f - 44.0f,
                      c.h - 96.0f);
     recessed(g, plot);
     plot_grid(g, plot, 10, 8);
@@ -765,9 +786,21 @@ void draw_scope(gd::Graphics &g, NativeModel &m) {
     g.DrawLine(&trigger, plot.x + plot.w * 0.5f, plot.y,
                plot.x + plot.w * 0.5f, plot.y + plot.h);
 
-    text_rect(g, rect(plot.x, plot.y + plot.h + 4.0f, plot.w, 14.0f),
-              FONT_SMALL, g_pal.text_faint,
-              L"15.0 ms  ·  10 div  ·  −1.0 … +1.0 FS", TEXT_RIGHT);
+    /* Y 轴 ±1.0 / 0；X 轴 0 / 7.5 / 15 ms。 */
+    text_rect(g, rect(plot.x - 42.0f, plot.y - 6.0f, 36.0f, 16.0f), FONT_SMALL,
+              g_pal.text_faint, L"+1.0", TEXT_RIGHT);
+    text_rect(g, rect(plot.x - 42.0f, mid - 8.0f, 36.0f, 16.0f), FONT_SMALL,
+              g_pal.text_faint, L"0", TEXT_RIGHT);
+    text_rect(g, rect(plot.x - 42.0f, plot.y + plot.h - 10.0f, 36.0f, 16.0f),
+              FONT_SMALL, g_pal.text_faint, L"\x2212" L"1.0", TEXT_RIGHT);
+    text_rect(g, rect(plot.x, plot.y + plot.h + 2.0f, 40.0f, 16.0f), FONT_SMALL,
+              g_pal.text_faint, L"0", TEXT_LEFT);
+    text_rect(g, rect(plot.x + plot.w * 0.5f - 30.0f, plot.y + plot.h + 2.0f,
+                      60.0f, 16.0f),
+              FONT_SMALL, g_pal.text_faint, L"7.5 ms", TEXT_CENTER);
+    text_rect(g, rect(plot.x + plot.w - 40.0f, plot.y + plot.h + 2.0f, 40.0f,
+                      16.0f),
+              FONT_SMALL, g_pal.text_faint, L"15 ms", TEXT_RIGHT);
 
     Rect r = right_card();
     card(g, r);
@@ -830,8 +863,8 @@ void draw_spectrum(gd::Graphics &g, NativeModel &m) {
     card(g, c);
     title_block(g, c, L"SPECTRUM", L"Hann · 4096 · 20 Hz – 20 kHz");
 
-    Rect p = rect(c.x + PAD + 32.0f, c.y + 48.0f,
-                  c.w - PAD * 2.0f - 48.0f, c.h - 96.0f);
+    Rect p = rect(c.x + PAD + 40.0f, c.y + 48.0f,
+                  c.w - PAD * 2.0f - 56.0f, c.h - 96.0f);
     recessed(g, p);
     for (int i = 0; i <= 5; ++i) {
         const float yy = p.y + p.h * static_cast<float>(i) / 5.0f;
@@ -857,10 +890,22 @@ void draw_spectrum(gd::Graphics &g, NativeModel &m) {
             g.DrawLines(&pen, pts.data(), static_cast<INT>(pts.size()));
         }
     }
-    text_rect(g, rect(p.x, p.y + p.h + 4.0f, p.w, 14.0f), FONT_SMALL,
-              g_pal.text_faint,
-              L"20 Hz                       1 kHz                       20 kHz",
-              TEXT_RIGHT);
+
+    /* Y 轴 dB 刻度（0 / −20 … −100），X 轴 20 Hz / 1 kHz / 20 kHz。 */
+    for (int i = 0; i <= 5; ++i) {
+        wchar_t lab[16];
+        if (i == 0) std::swprintf(lab, 16, L"0");
+        else std::swprintf(lab, 16, L"\x2212%d", i * 20);
+        text_rect(g, rect(p.x - 42.0f, p.y + p.h * static_cast<float>(i) / 5.0f -
+                                          8.0f, 36.0f, 16.0f),
+                  FONT_SMALL, g_pal.text_faint, lab, TEXT_RIGHT);
+    }
+    text_rect(g, rect(p.x, p.y + p.h + 2.0f, 60.0f, 16.0f), FONT_SMALL,
+              g_pal.text_faint, L"20 Hz", TEXT_LEFT);
+    text_rect(g, rect(p.x + p.w * 0.5f - 30.0f, p.y + p.h + 2.0f, 60.0f, 16.0f),
+              FONT_SMALL, g_pal.text_faint, L"1 kHz", TEXT_CENTER);
+    text_rect(g, rect(p.x + p.w - 60.0f, p.y + p.h + 2.0f, 60.0f, 16.0f),
+              FONT_SMALL, g_pal.text_faint, L"20 kHz", TEXT_RIGHT);
 
     Rect r = right_card();
     card(g, r);
@@ -1152,33 +1197,60 @@ void draw_reports(gd::Graphics &g, NativeModel &m) {
     title_block(g, c, L"REPORTS", L"most recent first");
 
     const float ty = c.y + 56.0f;
-    text(g, c.x + PAD + 8.0f, ty, FONT_SMALL, g_pal.text_faint, L"FILE");
-    text(g, c.x + 330.0f, ty, FONT_SMALL, g_pal.text_faint, L"KIND");
-    text(g, c.x + 450.0f, ty, FONT_SMALL, g_pal.text_faint, L"TIME");
-    text_rect(g, rect(c.x + c.w - PAD - 60.0f, ty, 60.0f, 16.0f), FONT_SMALL,
+    const float tx = c.x + PAD + 8.0f;
+    const float tw = c.w - PAD * 2.0f - 16.0f;
+    const float right = c.x + c.w - PAD;
+    const float col_kind = tx + tw * 0.50f;
+    const float col_time = tx + tw * 0.78f;
+
+    text_rect(g, rect(tx, ty, 60.0f, 16.0f), FONT_SMALL, g_pal.text_faint,
+              L"FILE", TEXT_LEFT);
+    text_rect(g, rect(col_kind, ty, 80.0f, 16.0f), FONT_SMALL, g_pal.text_faint,
+              L"KIND", TEXT_LEFT);
+    text_rect(g, rect(col_time - 120.0f, ty, 120.0f, 16.0f), FONT_SMALL,
+              g_pal.text_faint, L"TIME", TEXT_RIGHT);
+    text_rect(g, rect(right - 60.0f, ty, 60.0f, 16.0f), FONT_SMALL,
               g_pal.text_faint, L"RESULT", TEXT_RIGHT);
-    line(g, c.x + PAD, ty + 20.0f, c.x + c.w - PAD, ty + 20.0f,
-         g_pal.line_soft, 1.0f);
+    line(g, c.x + PAD, ty + 20.0f, right, ty + 20.0f, g_pal.line_soft, 1.0f);
 
     if (m.reports.empty()) {
-        text(g, c.x + PAD + 8.0f, ty + 42.0f, FONT_SMALL, g_pal.text_faint,
-             L"No reports yet. Export one from the repair page or the button →");
+        /* 空状态：图标块 + 发生了什么 / 为什么 / 下一步（三行以内）。 */
+        const float bw = 56.0f;
+        const float bh = 56.0f;
+        const float bx = c.x + (c.w - bw) * 0.5f;
+        const float by = c.y + c.h * 0.42f;
+        fill_round(g, rect(bx, by, bw, bh), 6.0f, g_pal.card_alt);
+        stroke_round(g, rect(bx, by, bw, bh), 6.0f, g_pal.line_soft, 1.0f);
+        line(g, bx + 16.0f, by + 28.0f, bx + 40.0f, by + 28.0f,
+             g_pal.text_faint, 1.0f);
+        line(g, bx + 16.0f, by + 34.0f, bx + 32.0f, by + 34.0f,
+             g_pal.text_faint, 1.0f);
+        text_rect(g, rect(c.x, by + bh + 10.0f, c.w, 20.0f), FONT_LABEL,
+                  g_pal.text, L"No reports yet", TEXT_CENTER);
+        text_rect(g, rect(c.x, by + bh + 30.0f, c.w, 16.0f), FONT_SMALL,
+                  g_pal.text_dim,
+                  L"Export one from the repair page or the button on the right.",
+                  TEXT_CENTER);
+        text_rect(g, rect(c.x, by + bh + 48.0f, c.w, 16.0f), FONT_SMALL,
+                  g_pal.text_faint,
+                  L"Reports stay on this machine; nothing is uploaded.",
+                  TEXT_CENTER);
     }
     for (size_t i = 0; i < m.reports.size(); ++i) {
         const NativeReport &rep = m.reports[i];
         const float yy = ty + 36.0f + static_cast<float>(i) * 34.0f;
-        text_rect(g, rect(c.x + PAD + 8.0f, yy, 290.0f, 18.0f), FONT_MONO,
+        text_rect(g, rect(tx, yy, col_kind - tx - 12.0f, 18.0f), FONT_MONO,
                   g_pal.text, widen(rep.name), TEXT_LEFT);
-        text(g, c.x + 330.0f, yy, FONT_SMALL, g_pal.text_dim,
-             widen(rep.kind));
-        text(g, c.x + 450.0f, yy, FONT_MONO, g_pal.text_dim,
-             widen(rep.time));
-        text_rect(g, rect(c.x + c.w - PAD - 60.0f, yy, 60.0f, 18.0f),
-                  FONT_SMALL, rep.pass ? g_pal.good : g_pal.warn,
+        text_rect(g, rect(col_kind, yy, 90.0f, 18.0f), FONT_MONO,
+                  g_pal.text_dim, widen(rep.kind), TEXT_LEFT);
+        text_rect(g, rect(col_time - 120.0f, yy, 120.0f, 18.0f), FONT_MONO,
+                  g_pal.text_dim, widen(rep.time), TEXT_RIGHT);
+        text_rect(g, rect(right - 60.0f, yy, 60.0f, 18.0f), FONT_SMALL,
+                  rep.pass ? g_pal.good : g_pal.warn,
                   rep.pass ? L"PASS" : L"WARN", TEXT_RIGHT);
         if (i + 1 < m.reports.size())
-            line(g, c.x + PAD, yy + 24.0f, c.x + c.w - PAD, yy + 24.0f,
-                 g_pal.line_soft, 1.0f);
+            line(g, c.x + PAD, yy + 24.0f, right, yy + 24.0f, g_pal.line_soft,
+                 1.0f);
     }
 
     Rect r = right_card();
@@ -1253,16 +1325,17 @@ void draw_calibration(gd::Graphics &g, NativeModel &m) {
 void draw_footer(gd::Graphics &g) {
     line(g, 0.0f, H - FOOTER_H, W, H - FOOTER_H, g_pal.line_soft, 1.0f);
 
+    const float by = H - FOOTER_H + 8.0f;
     const std::wstring left =
         std::wstring(g_model.capture ? L"INPUT" : L"SYNTHETIC") + L" · " +
         fmt(g_model.fs, 0) + L" Hz · " + std::to_wstring(g_model.channels) +
         L" ch · " + (g_model.hold ? L"HOLD" : L"LIVE");
-    text(g, PAD, H - FOOTER_H + 9.0f, FONT_SMALL, g_pal.text_faint, left);
-    text_rect(g, rect(0.0f, H - FOOTER_H + 8.0f, W, 16.0f), FONT_SMALL,
-              g_pal.text_faint,
+    text_rect(g, rect(PAD, by, 420.0f, 16.0f), FONT_MONO, g_pal.text_faint,
+              left, TEXT_LEFT);
+    text_rect(g, rect(0.0f, by, W, 16.0f), FONT_MONO, g_pal.text_faint,
               std::wstring(L"BERRYSTUDIO / ") + app_version(), TEXT_CENTER);
-    text_rect(g, rect(W - 420.0f, H - FOOTER_H + 8.0f, 404.0f, 16.0f),
-              FONT_SMALL, g_pal.text_faint, widen(g_model.message), TEXT_RIGHT);
+    text_rect(g, rect(W - PAD - 404.0f, by, 404.0f, 16.0f), FONT_MONO,
+              g_pal.text_faint, widen(g_model.message), TEXT_RIGHT);
 }
 
 void draw_frame(gd::Graphics &g) {
