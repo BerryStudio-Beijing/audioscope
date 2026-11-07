@@ -40,5 +40,5 @@ AudioScope — 声卡示波器 / 频谱仪 / 闭环测试仪（C 版 v1.1，arm6
   校准与报告：~/Documents/AudioScope/
 
 详细说明见 README.md（本 DMG 内不带文档，可访问项目主页）：
-  https://github.com/mmr0817/audioscope
+  https://github.com/BerryStudio-Beijing/audioscope
 

@@ -1733,9 +1733,9 @@ make win-core
 
 ### C. 参考
 
-- 仓库：<https://github.com/mmr0817/audioscope>
-- README：<https://github.com/mmr0817/audioscope/blob/main/README.md>
-- Releases：<https://github.com/mmr0817/audioscope/releases>
+- 仓库：<https://github.com/BerryStudio-Beijing/audioscope>
+- README：<https://github.com/BerryStudio-Beijing/audioscope/blob/main/README.md>
+- Releases：<https://github.com/BerryStudio-Beijing/audioscope/releases>
 - 相关标准（实现时查阅原文）：AES17（音频测量）、IEC 61606（音频设备测量）、IEC/DIN 磁带 wow&flutter 加权。
 
 ### D. 待决问题
