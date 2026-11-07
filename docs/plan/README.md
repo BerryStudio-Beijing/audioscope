@@ -24,6 +24,8 @@
 | [`V0.9.md`](V0.9.md) | 0.9-alpha 原生 UI、.app 与 Windows 安装包 | 产品/工程/测试 |
 | [`V0.9.1.md`](V0.9.1.md) | 0.9.1-beta 交互/性能修正（动画、缩放、帧率、排印、浅色测量面） | 产品/工程/测试 |
 | [`V0.9.2.md`](V0.9.2.md) | 0.9.2-beta Windows 排版对齐（真减号、轴刻度、空状态、页眉页脚） | 产品/工程/测试 |
+| [`V0.9.3.md`](V0.9.3.md) | 0.9.3-beta 信号发生器（9 波形）、设备选择与 FFT 尺寸 | 产品/工程/测试 |
+| [`V1.0.md`](V1.0.md) | 1.0 正式版：双通道独立、实际采样率、模拟结果标注、发生器/设备 | 产品/工程/测试 |
 
 建议在仓库中的放置方式：
 
@@ -78,6 +80,8 @@ C11 实时核心 + C++17 应用/平台层；macOS 用 CoreAudio/CoreGraphics，W
 | **0.9-alpha** | Native | 移除 Web UI；macOS .app + Windows 安装包、原生七页、多页 PDF、loopback |
 | **0.9.1-beta** | Interaction & Performance | 导航动画时间驱动、窗口等比自适应、60 Hz、缓存渲染、浅色模式保持深石墨测量面、排印/表格/轴刻度统一 |
 | **0.9.2-beta** | Windows Parity | Windows 补齐真减号、轴刻度、空状态、安全声明、表格列宽与页眉页脚排印 |
+| **0.9.3-beta** | Generator & I/O | 9 波发生器（−20 dBFS 默认上限）、设备选择、热插拔提示、FFT 尺寸 |
+| **1.0** | Trustworthy Measurement | 双通道独立、实际采样率、模拟结果明确标注、正式发布 |
 | v1.2 | Safe & Calibrated | 双端不出事、可相信 |
 | v1.3 | Multi-channel & Phase | 双端看得全、看得准 |
 | v1.4 | Repair Workflow | 双端能干活、能交付 |

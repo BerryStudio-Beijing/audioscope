@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(AudioScopeByBerryStudio VERSION 0.9.2 LANGUAGES C CXX)
+project(AudioScopeByBerryStudio VERSION 1.0.0 LANGUAGES C CXX)
 
 if(APPLE)
     enable_language(OBJCXX)
@@ -129,8 +129,8 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist"
         MACOSX_BUNDLE_BUNDLE_NAME "AudioScope"
         MACOSX_BUNDLE_GUI_IDENTIFIER "studio.berry.audioscope"
-        MACOSX_BUNDLE_BUNDLE_VERSION "0.9.2"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.9.2")
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0")
     set_source_files_properties(
         src/platform/macos/native_app.mm src/platform/macos/native_main.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
@@ -144,9 +144,9 @@ if(APPLE)
 endif()
 
 if(MSVC)
-    target_compile_options(audioscope_core PRIVATE /W4)
-    target_compile_options(audioscope_ui PRIVATE /W4)
-    target_compile_options(audioscope_app PRIVATE /W4)
+    target_compile_options(audioscope_core PRIVATE /W4 /utf-8)
+    target_compile_options(audioscope_ui PRIVATE /W4 /utf-8)
+    target_compile_options(audioscope_app PRIVATE /W4 /utf-8)
 else()
     target_compile_options(audioscope_ui PRIVATE -Wall -Wextra)
     target_compile_options(audioscope_app PRIVATE -Wall -Wextra)
@@ -172,5 +172,19 @@ if(APPLE)
         target_compile_options(alpha_nav_test PRIVATE -Wall -Wextra)
     endif()
     add_test(NAME alpha_nav_indicator COMMAND alpha_nav_test)
+
+    # 模型级可信度回归：CH2 独立 / 模拟计划 / FFT / 实际采样率。
+    add_executable(alpha_model_test
+        tests/test_model.cpp
+        src/app/native_model.cpp)
+    target_include_directories(alpha_model_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(alpha_model_test PRIVATE
+        audioscope_core audioscope_platform
+        "-framework CoreAudio" "-framework AudioToolbox"
+        "-framework AudioUnit" "-framework CoreFoundation")
+    if(NOT MSVC)
+        target_compile_options(alpha_model_test PRIVATE -Wall -Wextra)
+    endif()
+    add_test(NAME alpha_model_invariants COMMAND alpha_model_test)
 endif()
 

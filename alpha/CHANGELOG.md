@@ -1,5 +1,77 @@
 # AudioScope by BerryStudio — Changelog
 
+## 1.0.0 — 2026-11-07
+
+首个正式版。定位仍是“声卡音频维修工作台”，本版把 0.9.3 新增的发生器/I/O
+与一组“结果可信度”修正一起交付。
+
+### Added
+
+- **9 种信号发生器**（测量页 GENERATOR）：正弦、方波、三角、锯齿、白噪、
+  粉噪、对数扫频、单位脉冲、阶跃；PolyBLEP、固定种子噪声、200 ms 启动淡入。
+- **输入/输出设备选择**：波形页 IN / OUT 循环，采集、发生器与 loopback
+  都使用选中设备。
+- **热插拔检测**：每 2 s 枚举；选中输入消失时停采并提示，不静默切换。
+- **FFT 尺寸**：频谱页 1024 / 2048 / 4096 / 8192 / 16384。
+- 安装包与 `.app` 的版本、README、release notes 统一到 `1.0.0`。
+
+### Fixed
+
+- **CH2 独立分析**：不再用“CH1 − 0.9 dB”推算 CH2；两通道各自计算
+  peak / RMS / 频率 / Vpp / 削波，报告直接使用每通道统计。
+- **实际采样率贯通**：统计、FFT bin 映射、THD、相位、时间轴与 loopback
+  使用设备实际采样率，不再硬编码 48 kHz。
+- **模拟结果不再冒充实测**：Tape Plan 明确标记 `SIMULATED`，屏幕显示
+  `DEMO PASS/FAIL`；导出的 JSON/HTML/PDF 带模拟备注并降为 WARN。
+- **Loopback 更名**：结果只称 `connectivity OK/FAIL`，不暗示 DUT 全面合格。
+- **Windows WinMM 设备 ID**：按 `in%u` / `out%u` 解析真实设备编号，而不是
+  把列表下标直接传给 waveIn/waveOut。
+
+### Known limits
+
+- Windows 仍为 WinMM 2ch；WASAPI / 独占 / >2ch 未实现。
+- 设备选择不带采样率切换；macOS 最低 12.0，Windows 最低 10。
+- 未校准只显示 dBFS；校准向导、游标/缩放/平移、前后对比未完成。
+- Tape Plan 是固定夹具演示，不是 DUT 测量。
+- 二进制未签名/未公证；Windows 真机音频未在本机构建环境验证。
+
+## 0.9.3-beta.1 — 2026-11-07
+
+### Added
+
+- **9 种信号发生器**（测量页 GENERATOR）：正弦、方波、三角、锯齿、白噪、
+  粉噪、对数扫频、单位脉冲、阶跃。方波/锯齿用 PolyBLEP 抑制混叠；噪声用固定
+  种子 xorshift，同参数逐位可复现。
+  - 新增 `AsWaveform` / `AsGenConfig` / `as_gen_render()` / `as_wave_*()`；
+    旧的 `as_generator_sine()` / `as_generator_square()` 保留为薄封装。
+  - 输出电平预设 `−60 / −40 / −30 / −20 dBFS`，**默认钳在 −20 dBFS**；
+    `gen_hot_allowed` 是预留的显式解锁位，UI 不提供解锁入口。
+  - 输出启动按 200 ms 线性淡入（逐样本，CoreAudio/WinMM 回调内）。
+  - CoreAudio / WinMM 回调读取原子配置后调用 `as_gen_render()`；音频线程
+    不分配、不加锁。
+- **设备选择**：波形页 IN / OUT 循环选择，采集与发生器都使用选中设备；
+  loopback 也改为选中输出→输入，不再固定系统默认。
+- 修正 Windows 端把“列表下标”当 WinMM 设备 ID 的旧问题：现在按 `in%u` /
+  `out%u` 解析真实设备编号。
+- **热插拔**：每 2 s 重新枚举设备；选中输入消失时停止采集并显示
+  `input device lost — capture stopped`，**不会静默切换到其它设备**。
+- **FFT 尺寸**：频谱页 `1024 / 2048 / 4096 / 8192 / 16384`；历史缓冲扩到
+  16384，频谱 / THD / 相位共用尾部 N 点窗，切换后立即刷新。
+- 自检新增 11 项（各波形 RMS/峰值、噪声确定性、脉冲计数、阶跃形状、扫频
+  走向），selftest 52 → **63 项**。
+
+### Changed
+
+- `NativeModel::wave`（CH1 波形缓冲）与新增的波形类型字段分开命名
+  （`gen_wave`），避免同一结构里重名。
+
+### Known limits
+
+- Windows 仍是 WinMM 2ch；本机无 mingw/MSVC，Windows 构建与 UI 由 CI 验证。
+- 设备选择不带采样率切换（仍 48 kHz），没有 WASAPI / 独占模式。
+- 热插拔只处理“选中设备消失”，不自动恢复采集；需要用户重新确认。
+- 发生器是软件侧输出，不能保护声卡；未知电平请用受保护前端。
+
 ## 0.9.2-beta.1 — 2026-11-07
 
 ### Fixed (Windows parity)

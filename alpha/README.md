@@ -1,7 +1,35 @@
-# AudioScope by BerryStudio — 0.9.2-beta (Native)
+# AudioScope by BerryStudio — 1.0 (Native)
 
-> **AudioScope by BerryStudio** · `0.9.2-beta.1` · macOS 12+ arm64 · Windows 10/11 x64
+> **AudioScope by BerryStudio** · `1.0.0` · macOS 12+ arm64 · Windows 10/11 x64
 > C11 core + C++17 app · native AppKit/CoreGraphics + Win32/GDI+ · no Web UI
+
+## 1.0 是什么
+
+1.0 是第一个正式版：七页原生测量界面、发生器、设备选择、报告与安装包。
+本版重点不是加页面，而是让已有结果**可相信**：
+
+- **双通道独立**：CH1/CH2 各自计算 peak / RMS / 频率 / Vpp / 削波，报告使用
+  每通道数据，不再由 CH1 推算 CH2。
+- **实际采样率**：统计、FFT bin、THD、相位、时间轴与 loopback 跟随设备实际率。
+- **模拟结果明确**：Tape Plan 标注 `SIMULATED`，屏幕为 `DEMO PASS/FAIL`，
+  导出报告带模拟备注并降为 WARN。
+- **信号发生器**：9 种波形、默认 −20 dBFS 上限、200 ms 淡入、固定种子噪声。
+- **设备与 FFT**：IN/OUT 选择、热插拔检测、FFT 1024–16384。
+- **Windows**：WinMM 设备编号修正；`setup.exe` + 便携 zip；macOS `.app`/`.dmg`。
+
+## 0.9.3-beta 是什么
+
+0.9.3 给“只读监测”补上主动输出与音频 I/O：
+
+- **信号发生器**：正弦、方波、三角、锯齿、白噪、粉噪、对数扫频、单位脉冲、
+  阶跃；方波/锯齿带 PolyBLEP，噪声固定种子可复现。
+- **安全电平**：预设 −60 / −40 / −30 / −20 dBFS，默认钳在 **−20 dBFS**，
+  UI 不提供解锁入口；输出启动 200 ms 淡入。
+- **设备选择**：波形页 IN / OUT 循环选择，采集、发生器、loopback 都使用
+  选中设备；稳定 id 在重新枚举后找回。
+- **热插拔**：每 2 s 枚举；选中输入消失时停止采集并提示，不静默切换。
+- **FFT 尺寸**：频谱页 1024 / 2048 / 4096 / 8192 / 16384，切换立即刷新。
+- 自检 52 → **63 项**；`make test` 另含 ringtest、12 项 navtest 与七页截图。
 
 ## 0.9.2-beta 是什么
 
@@ -58,7 +86,7 @@ cd alpha
 # macOS 原生 app + CLI + 测试
 make app          # build/AudioScope.app
 make mac          # build/audioscope-alpha (CLI)
-make test         # 52 项 selftest + ringtest + 导航动画回归 + native --shot
+make test         # 63 项 selftest + ringtest + 12 项 navtest + 10 项 modeltest + 七页截图
 
 # 离屏渲染七页（调试/截图）
 ./build/AudioScope.app/Contents/MacOS/AudioScope --shot build/shots
@@ -91,11 +119,13 @@ open build/AudioScope.app
 - Windows 未在真实音频设备上运行验证（CI 只保证编译/测试/打包）。
 - 二进制未签名；macOS Gatekeeper / Windows SmartScreen 可能提示。
 - 未校准只显示 dBFS；没有校准向导 UI。
-- 没有设备选择 UI，采集/回环使用系统默认设备。
-- Loopback 需要手动接线；不是校准过的 DUT 测量。
+- **设备选择是基础版**：可循环选择输入/输出并记忆 id，但没有设备详情、
+  采样率切换或通道映射；Windows 仍固定 2ch。
+- Loopback 需要手动接线；结果只代表连通性，不是校准过的 DUT 测量。
+- **Tape Plan 是固定夹具演示**（SIMULATED），不是被测设备结果。
 - 没有硬件保护前端：软件不能保护声卡。
 
 ## 后续
 
-- WASAPI、真机验证、设备选择、游标/缩放、校准向导、签名/公证。
-- 记录见 [`../docs/plan/V0.9.md`](../docs/plan/V0.9.md)。
+- WASAPI、真机验证、采样率切换、游标/缩放、校准向导、签名/公证。
+- 记录见 [`../docs/plan/V1.0.md`](../docs/plan/V1.0.md)。

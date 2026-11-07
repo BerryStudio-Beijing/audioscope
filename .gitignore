@@ -4,5 +4,6 @@ build/
 *.dmg
 *.png
 !docs/screenshots/*.png
+!docs/screenshots/*/*.png
 build/repro/
 dist/
