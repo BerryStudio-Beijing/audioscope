@@ -49,8 +49,8 @@ make win          # Windows CLI cross-build (mingw-w64)
 ## v1.1 原实现（历史）
 
 macOS 原生的**声卡示波器 / 频谱仪 / 闭环测试仪**：纯 C + 系统框架实现，
-1 个 170 KB 二进制、零第三方依赖、启动 < 0.1 s。v1.1 源码保留在
-`main` 分支与 tag `v1.1.0-initial`。
+1 个 170 KB 二进制、零第三方依赖、启动 < 0.1 s。v1.1 源码保留在 tag
+`v1.1.0-initial`（以及 `v1.1` 标签）；`main` 分支现在跟随 0.9.x 原生版。
 
 ![AudioScope 主界面：波形 / 时域](docs/screenshots/0_scope.png)
 
